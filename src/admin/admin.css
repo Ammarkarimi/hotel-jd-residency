@@ -350,6 +350,15 @@ body {
   color: #1a1206;
   background: linear-gradient(135deg, #ffd98a, #e8b04b, #ff5d8f);
 }
+.banner-inline {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--st-pending-bg);
+  color: var(--st-pending);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
 .login-back {
   justify-self: center;
   font-size: 0.88rem;

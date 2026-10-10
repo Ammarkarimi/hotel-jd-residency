@@ -3,14 +3,13 @@ import assert from 'node:assert/strict';
 import { openDb } from '../server/db.js';
 import { createApp } from '../server/app.js';
 import { addDays, today } from '../server/bookings.js';
-import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
 
+let db;
 let server;
+let server2;
 let base;
+let base2;
 let cookie = '';
-let uploadDir;
 const d = (n) => addDays(today(), n);
 
 async function api(method, url, body, { auth = false } = {}) {
@@ -26,17 +25,26 @@ async function api(method, url, body, { auth = false } = {}) {
 
 const guest = { guest_name: 'Asha Rao', phone: '+91 98765 43210', email: 'asha@example.com', adults: 2 };
 
+const listen = async (app) => {
+  const s = app.listen(0);
+  await new Promise((r) => s.once('listening', r));
+  return s;
+};
+
 before(async () => {
-  const db = openDb(':memory:');
-  uploadDir = fs.mkdtempSync(path.join(os.tmpdir(), 'jd-uploads-'));
-  server = createApp(db, { uploadDir }).listen(0);
-  await new Promise((r) => server.once('listening', r));
+  // TEST_DATABASE_URL runs the suite against a real Postgres server instead of the built-in one.
+  db = await openDb(process.env.TEST_DATABASE_URL ? { url: process.env.TEST_DATABASE_URL } : { memory: true });
+  server = await listen(await createApp(db));
   base = `http://127.0.0.1:${server.address().port}`;
+  // A second app on the same database, like a second Vercel instance.
+  server2 = await listen(await createApp(db));
+  base2 = `http://127.0.0.1:${server2.address().port}`;
 });
 
-after(() => {
+after(async () => {
   server.close();
-  fs.rmSync(uploadDir, { recursive: true, force: true });
+  server2.close();
+  await db.close();
 });
 
 test('public info lists active room types and settings', async () => {
@@ -58,6 +66,13 @@ test('wrong password is rejected, right one logs in', async () => {
   assert.equal(ok.status, 200);
   assert.equal(ok.body.admin.must_change_password, true);
   assert.equal((await api('GET', '/api/admin/me', null, { auth: true })).status, 200);
+});
+
+test('a login works on every server instance', async () => {
+  for (let i = 0; i < 3; i++) {
+    const res = await fetch(base2 + '/api/admin/me', { headers: { cookie } });
+    assert.equal(res.status, 200);
+  }
 });
 
 test('booking validation', async () => {
@@ -89,6 +104,14 @@ test('Family Suite (2 rooms) sells out after two overlapping bookings', async ()
   const ref = a.body.booking.ref;
   assert.equal((await api('GET', `/api/public/bookings/${ref}?phone=0000000000`)).status, 404);
   assert.equal((await api('GET', `/api/public/bookings/${ref}?phone=9876543210`)).status, 200);
+});
+
+test('two guests racing for the last room: only one gets it', async () => {
+  // Family Suite has 2 rooms; book one so a single room is left.
+  const stay = { ...guest, guest_name: 'Race Guest', email: 'race@example.com', room_type_id: 3, check_in: d(30), check_out: d(31) };
+  assert.equal((await api('POST', '/api/public/bookings', stay)).status, 201);
+  const results = await Promise.all([1, 2, 3].map(() => api('POST', '/api/public/bookings', stay)));
+  assert.deepEqual(results.map((r) => r.status).sort(), [201, 409, 409]);
 });
 
 test('cancelling frees the room again', async () => {

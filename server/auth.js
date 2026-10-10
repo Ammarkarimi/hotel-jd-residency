@@ -70,9 +70,9 @@ export function clearSessionCookie(res) {
 }
 
 export function requireAdmin(db, secret) {
-  return (req, res, next) => {
+  return async (req, res, next) => {
     const data = readToken(getCookie(req, COOKIE), secret);
-    const admin = data && db.prepare('SELECT * FROM admins WHERE id = ?').get(data.uid);
+    const admin = data && (await db.one('SELECT * FROM admins WHERE id = ?', [data.uid]));
     if (!admin || fingerprint(admin.password_hash) !== data.fp) {
       return res.status(401).json({ error: 'Please log in again.' });
     }

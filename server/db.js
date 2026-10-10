@@ -1,9 +1,10 @@
-import { DatabaseSync } from 'node:sqlite';
-import fs from 'node:fs';
-import path from 'node:path';
 import crypto from 'node:crypto';
 import { hashPassword } from './auth.js';
 import { addDays, newRef, today } from './bookings.js';
+
+// Data lives in Postgres. On Vercel that's the Neon database linked to the project
+// (DATABASE_URL); locally, without DATABASE_URL, an embedded Postgres (PGlite) stores
+// data in data/pglite so nothing needs to be installed.
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS settings (
@@ -12,15 +13,15 @@ CREATE TABLE IF NOT EXISTS settings (
 );
 
 CREATE TABLE IF NOT EXISTS admins (
-  id                   INTEGER PRIMARY KEY AUTOINCREMENT,
-  username             TEXT NOT NULL UNIQUE COLLATE NOCASE,
+  id                   SERIAL PRIMARY KEY,
+  username             TEXT NOT NULL UNIQUE,
   password_hash        TEXT NOT NULL,
   must_change_password INTEGER NOT NULL DEFAULT 0,
-  created_at           TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS room_types (
-  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  id          SERIAL PRIMARY KEY,
   name        TEXT NOT NULL,
   tagline     TEXT NOT NULL DEFAULT '',
   description TEXT NOT NULL DEFAULT '',
@@ -36,7 +37,7 @@ CREATE TABLE IF NOT EXISTS room_types (
 );
 
 CREATE TABLE IF NOT EXISTS rooms (
-  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  id           SERIAL PRIMARY KEY,
   number       TEXT NOT NULL UNIQUE,
   room_type_id INTEGER NOT NULL REFERENCES room_types(id) ON DELETE RESTRICT,
   floor        TEXT NOT NULL DEFAULT '',
@@ -45,7 +46,7 @@ CREATE TABLE IF NOT EXISTS rooms (
 );
 
 CREATE TABLE IF NOT EXISTS bookings (
-  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  id               SERIAL PRIMARY KEY,
   ref              TEXT NOT NULL UNIQUE,
   room_type_id     INTEGER NOT NULL REFERENCES room_types(id) ON DELETE RESTRICT,
   room_id          INTEGER REFERENCES rooms(id) ON DELETE SET NULL,
@@ -62,14 +63,25 @@ CREATE TABLE IF NOT EXISTS bookings (
   source           TEXT NOT NULL DEFAULT 'website',
   special_requests TEXT NOT NULL DEFAULT '',
   admin_notes      TEXT NOT NULL DEFAULT '',
-  created_at       TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at       TEXT NOT NULL DEFAULT (datetime('now')),
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
   CHECK (check_out > check_in)
 );
 
 CREATE INDEX IF NOT EXISTS idx_bookings_dates ON bookings (check_in, check_out);
 CREATE INDEX IF NOT EXISTS idx_bookings_type ON bookings (room_type_id, status);
+
+CREATE TABLE IF NOT EXISTS photos (
+  id         TEXT PRIMARY KEY,
+  mime       TEXT NOT NULL,
+  data       BYTEA NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 `;
+
+/** Any fixed number: serialises schema setup and booking writes across server instances. */
+export const LOCK_SETUP = 727001;
+export const LOCK_BOOKINGS = 727002;
 
 export const DEFAULT_SETTINGS = {
   hotel_name: 'Hotel JD Residency',
@@ -135,26 +147,109 @@ const SEED_ROOM_TYPES = [
   },
 ];
 
-export function openDb(file = process.env.DATABASE_PATH || 'data/jd-residency.db') {
-  if (file !== ':memory:') fs.mkdirSync(path.dirname(path.resolve(file)), { recursive: true });
-  const db = new DatabaseSync(file);
-  db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
-  db.exec(SCHEMA);
-  seed(db);
-  if (process.env.DEMO_DATA === '1') seedDemoBookings(db);
+/** Lets queries be written with `?` placeholders, as Postgres wants `$1, $2, …`. */
+function numbered(sql) {
+  let i = 0;
+  return sql.replace(/\?/g, () => `$${++i}`);
+}
+
+function wrap(run, exec) {
+  const query = async (sql, params = []) => (await run(numbered(sql), params)).rows;
+  return {
+    query,
+    one: async (sql, params) => (await query(sql, params))[0],
+    exec,
+  };
+}
+
+async function pgDriver(url) {
+  const { default: pg } = await import('pg');
+  const pool = new pg.Pool({ connectionString: url, max: Number(process.env.PG_POOL_MAX) || 5, idleTimeoutMillis: 10_000 });
+  const db = wrap((sql, params) => pool.query(sql, params), (sql) => pool.query(sql));
+  db.tx = async (fn) => {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const result = await fn(wrap((sql, params) => client.query(sql, params), (sql) => client.query(sql)));
+      await client.query('COMMIT');
+      return result;
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw err;
+    } finally {
+      client.release();
+    }
+  };
+  db.close = () => pool.end();
   return db;
 }
 
+async function pgliteDriver(dataDir) {
+  const { PGlite } = await import('@electric-sql/pglite');
+  const pg = dataDir ? new PGlite(dataDir) : new PGlite();
+  await pg.waitReady;
+  const db = wrap((sql, params) => pg.query(sql, params), (sql) => pg.exec(sql));
+  db.tx = (fn) => pg.transaction((t) => fn(wrap((sql, params) => t.query(sql, params), (sql) => t.exec(sql))));
+  db.close = () => pg.close();
+  return db;
+}
+
+/**
+ * Opens the database, creating tables and starter data the first time.
+ * `memory: true` gives a throwaway in-memory database (used by tests).
+ */
+export async function openDb({ url = process.env.DATABASE_URL || process.env.POSTGRES_URL, memory = false } = {}) {
+  const db = url && !memory ? await pgDriver(url) : await pgliteDriver(memory ? null : process.env.PGLITE_DIR || 'data/pglite');
+  await db.tx(async (t) => {
+    await t.query('SELECT pg_advisory_xact_lock(?)', [LOCK_SETUP]);
+    await t.exec(SCHEMA);
+    const fresh = await seed(t);
+    if (fresh && process.env.DEMO_DATA === '1') await seedDemoBookings(t);
+  });
+  return db;
+}
+
+/** Fills in starter data. Returns true when the database was brand new. */
+async function seed(db) {
+  for (const [key, value] of Object.entries(DEFAULT_SETTINGS)) {
+    await db.query('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO NOTHING', [key, value]);
+  }
+  await db.query('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO NOTHING', [
+    'session_secret',
+    crypto.randomBytes(32).toString('hex'),
+  ]);
+
+  const { n: admins } = await db.one('SELECT COUNT(*)::int AS n FROM admins');
+  if (admins === 0) {
+    const username = (process.env.ADMIN_USERNAME || 'admin').toLowerCase();
+    const password = process.env.ADMIN_PASSWORD || 'jdresidency';
+    await db.query('INSERT INTO admins (username, password_hash, must_change_password) VALUES (?, ?, ?)', [
+      username,
+      hashPassword(password),
+      process.env.ADMIN_PASSWORD ? 0 : 1,
+    ]);
+  }
+
+  const { n: types } = await db.one('SELECT COUNT(*)::int AS n FROM room_types');
+  if (types === 0) {
+    for (const [i, t] of SEED_ROOM_TYPES.entries()) {
+      const { id } = await db.one(
+        `INSERT INTO room_types (name, tagline, description, price, max_guests, beds, size_sqft, amenities, image_url, accent, sort_order)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+        [t.name, t.tagline, t.description, t.price, t.max_guests, t.beds, t.size_sqft, JSON.stringify(t.amenities), t.image_url, t.accent, i],
+      );
+      for (const number of t.rooms) {
+        await db.query('INSERT INTO rooms (number, room_type_id, floor) VALUES (?, ?, ?)', [number, id, t.floor]);
+      }
+    }
+  }
+  return types === 0;
+}
+
 /** Sample guests so a fresh demo deployment shows a realistic admin panel. */
-function seedDemoBookings(db) {
-  if (db.prepare('SELECT COUNT(*) AS n FROM bookings').get().n > 0) return;
+async function seedDemoBookings(db) {
   const t = today();
-  const room = (number) => db.prepare('SELECT id, room_type_id FROM rooms WHERE number = ?').get(number);
-  const price = (typeId) => db.prepare('SELECT price FROM room_types WHERE id = ?').get(typeId).price;
-  const insert = db.prepare(`
-    INSERT INTO bookings (ref, room_type_id, room_id, guest_name, phone, email, adults, children, check_in, check_out,
-                          total_amount, status, source, special_requests)
-    VALUES (?, ?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?)`);
+  const room = (number) => db.one('SELECT id, room_type_id FROM rooms WHERE number = ?', [number]);
   const samples = [
     ['Rohan Mehta', '98200 11111', '201', 2, 0, -1, 2, 'checked_in', 'phone', ''],
     ['Priya Shah', '98200 22222', '301', 2, 2, -2, 0, 'checked_in', 'walk_in', ''],
@@ -165,63 +260,25 @@ function seedDemoBookings(db) {
     ['Kabir Singh', '98200 77777', null, 4, 0, 6, 9, 'pending', 'website', 'Need an extra pillow'],
   ];
   for (const [name, phone, number, adults, children, from, to, status, source, notes] of samples) {
-    const r = number ? room(number) : null;
-    const typeId = r ? r.room_type_id : adults > 3 ? room('301').room_type_id : room('103').room_type_id;
-    insert.run(newRef(db), typeId, r?.id ?? null, name, `+91 ${phone}`, adults, children, addDays(t, from), addDays(t, to),
-      price(typeId) * (to - from), status, source, notes);
-  }
-}
-
-function seed(db) {
-  const insertSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
-  for (const [key, value] of Object.entries(DEFAULT_SETTINGS)) insertSetting.run(key, value);
-  insertSetting.run('session_secret', crypto.randomBytes(32).toString('hex'));
-
-  const { n: admins } = db.prepare('SELECT COUNT(*) AS n FROM admins').get();
-  if (admins === 0) {
-    const username = process.env.ADMIN_USERNAME || 'admin';
-    const password = process.env.ADMIN_PASSWORD || 'jdresidency';
-    db.prepare('INSERT INTO admins (username, password_hash, must_change_password) VALUES (?, ?, ?)').run(
-      username,
-      hashPassword(password),
-      process.env.ADMIN_PASSWORD ? 0 : 1,
+    const r = number ? await room(number) : null;
+    const typeId = r ? r.room_type_id : (await room(adults > 3 ? '301' : '103')).room_type_id;
+    const { price } = await db.one('SELECT price FROM room_types WHERE id = ?', [typeId]);
+    await db.query(
+      `INSERT INTO bookings (ref, room_type_id, room_id, guest_name, phone, adults, children, check_in, check_out,
+                            total_amount, status, source, special_requests)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [await newRef(db), typeId, r?.id ?? null, name, `+91 ${phone}`, adults, children, addDays(t, from), addDays(t, to),
+        price * (to - from), status, source, notes],
     );
   }
-
-  const { n: types } = db.prepare('SELECT COUNT(*) AS n FROM room_types').get();
-  if (types === 0) {
-    const insertType = db.prepare(`
-      INSERT INTO room_types (name, tagline, description, price, max_guests, beds, size_sqft, amenities, image_url, accent, sort_order)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-    const insertRoom = db.prepare('INSERT INTO rooms (number, room_type_id, floor) VALUES (?, ?, ?)');
-    SEED_ROOM_TYPES.forEach((t, i) => {
-      const { lastInsertRowid } = insertType.run(
-        t.name, t.tagline, t.description, t.price, t.max_guests, t.beds, t.size_sqft,
-        JSON.stringify(t.amenities), t.image_url, t.accent, i,
-      );
-      for (const number of t.rooms) insertRoom.run(number, lastInsertRowid, t.floor);
-    });
-  }
 }
 
-export function getSettings(db) {
-  const rows = db.prepare('SELECT key, value FROM settings').all();
+export async function getSettings(db) {
+  const rows = await db.query('SELECT key, value FROM settings');
   return Object.fromEntries(rows.map((r) => [r.key, r.value]));
 }
 
-export function publicSettings(db) {
-  const all = getSettings(db);
+export async function publicSettings(db) {
+  const all = await getSettings(db);
   return Object.fromEntries(Object.keys(DEFAULT_SETTINGS).map((k) => [k, all[k] ?? DEFAULT_SETTINGS[k]]));
-}
-
-export function transaction(db, fn) {
-  db.exec('BEGIN IMMEDIATE');
-  try {
-    const result = fn();
-    db.exec('COMMIT');
-    return result;
-  } catch (err) {
-    db.exec('ROLLBACK');
-    throw err;
-  }
 }

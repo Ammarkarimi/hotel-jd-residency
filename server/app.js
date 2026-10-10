@@ -5,14 +5,14 @@ import { getSettings } from './db.js';
 import { publicRoutes } from './routes/public.js';
 import { adminRoutes } from './routes/admin.js';
 
-export function createApp(db, { staticDir, uploadDir } = {}) {
+export async function createApp(db, { staticDir } = {}) {
   const app = express();
-  const secret = process.env.SESSION_SECRET || getSettings(db).session_secret;
+  const secret = process.env.SESSION_SECRET || (await getSettings(db)).session_secret;
 
   app.disable('x-powered-by');
   app.set('trust proxy', 1);
   // Photo uploads arrive as base64 JSON, so that one route gets a larger body limit.
-  app.use('/api/admin/uploads', express.json({ limit: '9mb' }));
+  app.use('/api/admin/uploads', express.json({ limit: '6mb' }));
   app.use(express.json({ limit: '100kb' }));
   app.use((_req, res, next) => {
     res.set('X-Content-Type-Options', 'nosniff');
@@ -25,8 +25,14 @@ export function createApp(db, { staticDir, uploadDir } = {}) {
   });
 
   app.use('/api/public', publicRoutes(db));
-  app.use('/api/admin', adminRoutes(db, secret, uploadDir));
-  if (uploadDir) app.use('/uploads', express.static(uploadDir, { maxAge: '30d', fallthrough: false }));
+  app.use('/api/admin', adminRoutes(db, secret));
+  // Uploaded photos live in the database; names are unique, so they can be cached for good.
+  app.get('/uploads/:name', async (req, res) => {
+    const photo = await db.one('SELECT mime, data FROM photos WHERE id = ?', [req.params.name]);
+    if (!photo) return res.status(404).json({ error: 'Not found' });
+    res.set('Cache-Control', 'public, max-age=31536000, immutable');
+    res.type(photo.mime).send(Buffer.from(photo.data));
+  });
   app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));
 
   if (staticDir && fs.existsSync(staticDir)) {
