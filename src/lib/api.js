@@ -12,6 +12,10 @@ export async function api(path, { method = 'GET', body } = {}) {
     /* empty body */
   }
   if (!res.ok) {
+    // Tell the admin panel its session has ended so it can show the login screen.
+    if (res.status === 401 && path.startsWith('/admin/') && path !== '/admin/login') {
+      window.dispatchEvent(new CustomEvent('jd:logged-out'));
+    }
     const err = new Error(data.error || `Request failed (${res.status})`);
     err.status = res.status;
     throw err;

@@ -15,6 +15,17 @@ export const useAdmin = () => useContext(AdminCtx);
 
 export default function AdminApp() {
   const [admin, setAdmin] = useState(undefined);
+  const [expired, setExpired] = useState(false);
+
+  useEffect(() => {
+    const onLoggedOut = () =>
+      setAdmin((a) => {
+        if (a) setExpired(true);
+        return null;
+      });
+    window.addEventListener('jd:logged-out', onLoggedOut);
+    return () => window.removeEventListener('jd:logged-out', onLoggedOut);
+  }, []);
 
   useEffect(() => {
     document.title = 'Admin · JD Residency';
@@ -24,11 +35,20 @@ export default function AdminApp() {
   }, []);
 
   if (admin === undefined) return <div className="adm adm-loading">Loading…</div>;
-  if (!admin) return <Login onLogin={setAdmin} />;
+  if (!admin)
+    return (
+      <Login
+        expired={expired}
+        onLogin={(a) => {
+          setExpired(false);
+          setAdmin(a);
+        }}
+      />
+    );
   return <Shell admin={admin} setAdmin={setAdmin} />;
 }
 
-function Login({ onLogin }) {
+function Login({ onLogin, expired }) {
   const [form, setForm] = useState({ username: '', password: '' });
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -51,6 +71,7 @@ function Login({ onLogin }) {
         <div className="login-mark">JD</div>
         <h1>Staff login</h1>
         <p className="muted">Manage rooms and bookings for JD Residency.</p>
+        {expired && <p className="banner-inline">Your session ended. Please sign in again to continue.</p>}
         <label className="afield">
           <span>Username</span>
           <input

@@ -16,7 +16,7 @@ Hotel only, no restaurant: nothing on the site mentions dining.
 
 ## Run it locally
 
-Requires Node.js 22.13 or newer (it uses Node's built-in SQLite, so there's no database to install).
+Requires Node.js 20 or newer. Data is stored in Postgres: set `DATABASE_URL` to use a Postgres server (e.g. Neon); without it, a built-in Postgres (PGlite) keeps data in `data/pglite`, so there's nothing to install for local use.
 
 ```bash
 npm install
@@ -48,27 +48,32 @@ The hotel's details below are **placeholders** taken from public listings. Updat
 
 ## Deploying
 
-It's a single Node server that serves both the API and the built website. The SQLite database is a file, so the host needs a **persistent disk**:
+It's one Node app: Vercel serves the built website and runs the API as a serverless function (`api/index.js`, `vercel.json`).
+All data (bookings, rooms, settings, logins and uploaded photos) lives in **Postgres**, so every server instance sees the same data.
 
-- **Docker** (any VPS, Railway, Fly.io, Render with a disk): `docker build -t jd-residency . && docker run -p 3001:3001 -v jd-data:/data jd-residency`
-- **Plain VPS**: `npm ci && npm run build && npm start` behind nginx or Caddy with HTTPS. Point `DATABASE_PATH` at a backed-up location.
+### Vercel + Neon (current setup)
 
-### Design preview on Vercel
+1. In the Vercel project, open **Storage → Create Database → Neon** (free plan) and connect it to the project. This adds `DATABASE_URL`.
+2. Project environment variables: `ADMIN_USERNAME`, `ADMIN_PASSWORD` (first login, used only when the database is empty),
+   `SESSION_SECRET` (any long random string), `HOTEL_TIMEZONE=Asia/Kolkata`, and optionally `DEMO_DATA=1` to add sample
+   bookings to a brand-new database.
+3. Push to the production branch (`main`); Vercel builds and deploys it.
 
-A preview runs at https://hotel-jd-residency-ammars-projects-e3a53455.vercel.app (`vercel.json` + `api/index.js`).
-Vercel functions have no permanent disk, so the database lives in `/tmp`: it starts with sample bookings
-(`DEMO_DATA=1`) and **resets whenever Vercel starts a fresh instance**. Fine for showing the design; not for real bookings.
-The admin password for the preview is set in the Vercel project's `ADMIN_PASSWORD` environment variable.
+Tables and starter rooms are created automatically on first start.
 
-Connecting the GitHub repo in the Vercel dashboard (Project → Settings → Git) makes every push redeploy automatically.
+### Any other host
 
-Back up the database by copying the `.db` file (plus the `-wal` file if present) and the `uploads/` folder next to it, which holds the photos. Set `UPLOAD_DIR` to store photos elsewhere.
+- **Docker**: `docker build -t jd-residency . && docker run -p 3001:3001 -e DATABASE_URL=postgres://… jd-residency`
+  (without `DATABASE_URL`, data goes to the built-in database in the `/data` volume).
+- **Plain server**: `npm ci && npm run build && npm start` behind nginx or Caddy with HTTPS.
+
+Back up with `pg_dump "$DATABASE_URL"` (Neon also keeps automatic history).
 
 ## Project layout
 
 ```
 server/            Express API + SQLite (node:sqlite)
-  db.js            schema, seed data, settings
+  db.js            Postgres schema, starter data, settings (Neon or built-in PGlite)
   bookings.js      availability & booking rules
   routes/public.js website API (info, availability, book, look up booking)
   routes/admin.js  staff API (auth, dashboard, bookings, calendar, rooms, settings)

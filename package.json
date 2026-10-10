@@ -5,20 +5,22 @@
   "description": "Website and management panel for Hotel JD Residency",
   "type": "module",
   "engines": {
-    "node": ">=22.13"
+    "node": ">=20"
   },
   "scripts": {
-    "dev": "node --watch --disable-warning=ExperimentalWarning server/index.js & vite",
-    "dev:server": "node --watch --disable-warning=ExperimentalWarning server/index.js",
+    "dev": "node --watch server/index.js & vite",
+    "dev:server": "node --watch server/index.js",
     "dev:client": "vite",
     "build": "vite build",
-    "start": "NODE_ENV=production node --disable-warning=ExperimentalWarning server/index.js",
-    "test": "node --test --disable-warning=ExperimentalWarning test/*.test.js"
+    "start": "NODE_ENV=production node server/index.js",
+    "test": "node --test test/*.test.js"
   },
   "dependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "@react-three/drei": "^10.7.9",
     "@react-three/fiber": "^9.8.1",
     "express": "^5.3.0",
+    "pg": "^8.23.1",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "react-router-dom": "^7.18.4",
