@@ -2,13 +2,15 @@
 
 Website and front-desk panel for Hotel JD Residency.
 
-- **Public website** (`/`): an animated 3D night-city scene with the hotel tower that moves as you scroll, an explorable 3D model of each room type, amenities, location map and **online booking** (guests request a room, pay at the hotel).
-- **Staff panel** (`/admin`): a separate login where the hotel manages **rooms**, **prices** and **bookings**:
+- **Public website** (`/`): a clean, classic hotel site modelled on the patterns guests know from big hotel chains: a date and guest search right at the top, "pay at hotel / no booking fees" reassurance, room cards with prices, amenities, map, FAQ, and a call or WhatsApp button everywhere.
+- **Booking page** (`/book`): pick dates and guests, choose a room (live availability and total price), enter name and phone, done. A summary panel shows the price at every step, and guests get a booking reference plus "what happens next". Works well on phones, with a sticky "Confirm booking" bar.
+- **Room details**: each room opens a details view with its photo and an optional interactive **3D view** of the room.
+- **Staff panel** (`/admin`): a separate login where the hotel manages **rooms**, **prices**, **photos** and **bookings**:
   - Dashboard: arrivals, departures, guests in house, occupancy, 14-day occupancy forecast and revenue
   - Bookings: search and filter, confirm, assign room, check in/out, cancel, notes, CSV export, walk-in/phone bookings
   - Calendar: room-by-room timeline. Click an empty day to book that room
   - Rooms: add/edit room types (name, price, guests, beds, amenities, colour, photo) and physical rooms; block rooms for maintenance
-  - Settings: hotel name, phone, WhatsApp, address, map, check-in/out times; change password
+  - Settings: hotel name, phone, WhatsApp, address, map, check-in/out times; website photos (banner + gallery); change password
 
 Hotel only, no restaurant: nothing on the site mentions dining.
 
@@ -41,7 +43,8 @@ The hotel's details below are **placeholders** taken from public listings. Updat
 - Phone, WhatsApp and email (the phone is currently `+91 00000 00000`)
 - Address and map pin (currently set to the Andheri West, Mumbai listing)
 - Room types, prices, number of rooms and room numbers (seeded with 4 Deluxe, 4 Executive and 2 Family Suites)
-- Amenities list and "Nearby" travel times: edit `src/public/content.js`
+- **Photos**: the site ships with 3D-rendered room pictures labelled "Representative image" / "3D illustration". Upload real photos in **Settings → Website photos** (banner and gallery) and **Rooms → Edit** (one photo per room type). Photos are resized in the browser before upload.
+- Amenities, "About us" text, FAQ and "Nearby" travel times: edit `src/public/content.js`
 
 ## Deploying
 
@@ -52,7 +55,7 @@ It's a single Node server that serves both the API and the built website. The SQ
 
 Serverless hosts without a disk (e.g. Vercel functions) won't keep the database between requests.
 
-Back up the database by copying the `.db` file (plus the `-wal` file if present).
+Back up the database by copying the `.db` file (plus the `-wal` file if present) and the `uploads/` folder next to it, which holds the photos. Set `UPLOAD_DIR` to store photos elsewhere.
 
 ## Project layout
 
@@ -63,8 +66,8 @@ server/            Express API + SQLite (node:sqlite)
   routes/public.js website API (info, availability, book, look up booking)
   routes/admin.js  staff API (auth, dashboard, bookings, calendar, rooms, settings)
 src/
-  public/          the website
-  three/           3D scenes (hotel tower city, room explorer), built with three.js / react-three-fiber
+  public/          the website (home page, booking page, room details)
+  three/           3D room viewer, built with three.js / react-three-fiber
   admin/           the staff panel
 test/              API tests (node --test)
 ```

@@ -7,81 +7,31 @@ function canvas(w, h) {
   return [c, c.getContext('2d')];
 }
 
-/** Grid of randomly lit windows, used on the distant city blocks. */
-export function cityWindowTexture() {
-  const [c, g] = canvas(128, 256);
-  g.fillStyle = '#000';
-  g.fillRect(0, 0, 128, 256);
-  for (let y = 8; y < 256; y += 16) {
-    for (let x = 6; x < 128; x += 14) {
-      const r = Math.random();
-      if (r > 0.62) {
-        g.fillStyle = r > 0.93 ? '#7fd8ff' : r > 0.85 ? '#ff9ec0' : '#ffc46b';
-        g.globalAlpha = 0.35 + Math.random() * 0.65;
-        g.fillRect(x, y, 7, 9);
-      }
-    }
-  }
-  g.globalAlpha = 1;
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  return tex;
-}
-
-/** Glowing hotel name, rendered to a canvas so no font file has to be downloaded. */
-export function signTexture(text, color = '#ffcf6e') {
-  const [c, g] = canvas(1024, 192);
-  g.clearRect(0, 0, 1024, 192);
-  let size = 112;
-  const font = (px) => `800 ${px}px "Syne", "Arial Black", Arial, sans-serif`;
-  g.font = font(size);
-  while (size > 40 && g.measureText(text).width > 960) g.font = font((size -= 4));
-  g.textAlign = 'center';
-  g.textBaseline = 'middle';
-  g.shadowColor = color;
-  g.shadowBlur = 24;
-  g.fillStyle = color;
-  g.fillText(text, 512, 100);
-  g.shadowBlur = 0;
-  g.fillStyle = '#fff6df';
-  g.fillText(text, 512, 100);
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 4;
-  return tex;
-}
-
-/** Night skyline seen through the room's window. */
+/** Daytime city view seen through the room's window. */
 export function skylineTexture() {
   const [c, g] = canvas(512, 320);
   const sky = g.createLinearGradient(0, 0, 0, 320);
-  sky.addColorStop(0, '#0b0820');
-  sky.addColorStop(0.55, '#2b1640');
-  sky.addColorStop(1, '#ff8a5c');
+  sky.addColorStop(0, '#9cc4e4');
+  sky.addColorStop(0.7, '#d9e8f2');
+  sky.addColorStop(1, '#eef3f5');
   g.fillStyle = sky;
   g.fillRect(0, 0, 512, 320);
-  g.fillStyle = '#fff';
-  for (let i = 0; i < 60; i++) {
-    g.globalAlpha = Math.random() * 0.8;
-    g.fillRect(Math.random() * 512, Math.random() * 150, 1.5, 1.5);
+  g.fillStyle = 'rgba(255,255,255,0.7)';
+  for (const [cx, cy, r] of [[90, 60, 26], [120, 55, 32], [150, 64, 22], [370, 40, 20], [395, 36, 26]]) {
+    g.beginPath();
+    g.arc(cx, cy, r, 0, Math.PI * 2);
+    g.fill();
   }
-  g.globalAlpha = 1;
   let x = 0;
   while (x < 512) {
-    const w = 20 + Math.random() * 46;
-    const h = 60 + Math.random() * 170;
-    g.fillStyle = '#0a0812';
+    const w = 24 + Math.random() * 50;
+    const h = 70 + Math.random() * 160;
+    const shade = 150 + Math.floor(Math.random() * 50);
+    g.fillStyle = `rgb(${shade - 10}, ${shade}, ${shade + 12})`;
     g.fillRect(x, 320 - h, w - 3, h);
-    for (let wy = 320 - h + 8; wy < 312; wy += 10) {
-      for (let wx = x + 4; wx < x + w - 8; wx += 8) {
-        if (Math.random() > 0.6) {
-          g.fillStyle = Math.random() > 0.8 ? '#8fdcff' : '#ffc46b';
-          g.globalAlpha = 0.5 + Math.random() * 0.5;
-          g.fillRect(wx, wy, 4, 5);
-          g.globalAlpha = 1;
-        }
-      }
+    g.fillStyle = 'rgba(255,255,255,0.35)';
+    for (let wy = 320 - h + 8; wy < 312; wy += 11) {
+      for (let wx = x + 4; wx < x + w - 8; wx += 9) g.fillRect(wx, wy, 5, 6);
     }
     x += w;
   }

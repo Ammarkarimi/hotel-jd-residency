@@ -3,6 +3,7 @@ import { api } from '../lib/api.js';
 import { fmtDate, money } from '../lib/format.js';
 import Icon from '../lib/Icon.jsx';
 import { Modal, useAdmin } from './AdminApp.jsx';
+import PhotoField from './PhotoField.jsx';
 
 export default function Rooms() {
   const { roomTypes, rooms, reloadInventory, notify, openBooking } = useAdmin();
@@ -225,12 +226,16 @@ function RoomTypeModal({ type, onClose, onSaved }) {
             <span>Amenities (comma separated)</span>
             <input value={f.amenities} onChange={set('amenities')} placeholder="Air conditioning, Free Wi-Fi, Smart TV" />
           </label>
-          <label className="afield span-2">
-            <span>Photo link (optional; replaces the 3D room on the website)</span>
-            <input value={f.image_url} onChange={set('image_url')} placeholder="https://…" />
-          </label>
+          <PhotoField
+            wide
+            label="Room photo"
+            hint="Shown on the website. Use a bright, landscape photo of the actual room."
+            value={f.image_url.startsWith('/images/') ? '' : f.image_url}
+            fallback={f.image_url.startsWith('/images/') ? f.image_url : ''}
+            onChange={(url) => setF({ ...f, image_url: url })}
+          />
           <label className="afield">
-            <span>Colour on website</span>
+            <span>Colour (calendar &amp; 3D view)</span>
             <input type="color" value={f.accent} onChange={set('accent')} />
           </label>
           <label className="afield">

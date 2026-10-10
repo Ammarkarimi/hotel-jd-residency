@@ -2,7 +2,7 @@ import { StrictMode, Suspense, lazy } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 
-const Site = lazy(() => import('./public/Site.jsx'));
+const PublicApp = lazy(() => import('./public/PublicApp.jsx'));
 const AdminApp = lazy(() => import('./admin/AdminApp.jsx'));
 
 createRoot(document.getElementById('root')).render(
@@ -11,7 +11,7 @@ createRoot(document.getElementById('root')).render(
       <Suspense fallback={null}>
         <Routes>
           <Route path="/admin/*" element={<AdminApp />} />
-          <Route path="*" element={<Site />} />
+          <Route path="/*" element={<PublicApp />} />
         </Routes>
       </Suspense>
     </BrowserRouter>

@@ -5,12 +5,14 @@ import { getSettings } from './db.js';
 import { publicRoutes } from './routes/public.js';
 import { adminRoutes } from './routes/admin.js';
 
-export function createApp(db, { staticDir } = {}) {
+export function createApp(db, { staticDir, uploadDir } = {}) {
   const app = express();
   const secret = process.env.SESSION_SECRET || getSettings(db).session_secret;
 
   app.disable('x-powered-by');
   app.set('trust proxy', 1);
+  // Photo uploads arrive as base64 JSON, so that one route gets a larger body limit.
+  app.use('/api/admin/uploads', express.json({ limit: '9mb' }));
   app.use(express.json({ limit: '100kb' }));
   app.use((_req, res, next) => {
     res.set('X-Content-Type-Options', 'nosniff');
@@ -23,7 +25,8 @@ export function createApp(db, { staticDir } = {}) {
   });
 
   app.use('/api/public', publicRoutes(db));
-  app.use('/api/admin', adminRoutes(db, secret));
+  app.use('/api/admin', adminRoutes(db, secret, uploadDir));
+  if (uploadDir) app.use('/uploads', express.static(uploadDir, { maxAge: '30d', fallthrough: false }));
   app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));
 
   if (staticDir && fs.existsSync(staticDir)) {

@@ -3,10 +3,14 @@ import assert from 'node:assert/strict';
 import { openDb } from '../server/db.js';
 import { createApp } from '../server/app.js';
 import { addDays, today } from '../server/bookings.js';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 let server;
 let base;
 let cookie = '';
+let uploadDir;
 const d = (n) => addDays(today(), n);
 
 async function api(method, url, body, { auth = false } = {}) {
@@ -24,12 +28,16 @@ const guest = { guest_name: 'Asha Rao', phone: '+91 98765 43210', email: 'asha@e
 
 before(async () => {
   const db = openDb(':memory:');
-  server = createApp(db).listen(0);
+  uploadDir = fs.mkdtempSync(path.join(os.tmpdir(), 'jd-uploads-'));
+  server = createApp(db, { uploadDir }).listen(0);
   await new Promise((r) => server.once('listening', r));
   base = `http://127.0.0.1:${server.address().port}`;
 });
 
-after(() => server.close());
+after(() => {
+  server.close();
+  fs.rmSync(uploadDir, { recursive: true, force: true });
+});
 
 test('public info lists active room types and settings', async () => {
   const { status, body } = await api('GET', '/api/public/info');
@@ -121,6 +129,23 @@ test('room and room type management', async () => {
   assert.equal((await api('DELETE', `/api/admin/room-types/${type.body.room_type.id}`, null, { auth: true })).status, 409);
   assert.equal((await api('DELETE', `/api/admin/rooms/${room.body.room.id}`, null, { auth: true })).status, 200);
   assert.equal((await api('DELETE', `/api/admin/room-types/${type.body.room_type.id}`, null, { auth: true })).status, 200);
+});
+
+test('photo upload and gallery settings', async () => {
+  const png = 'data:image/png;base64,' + Buffer.from('fake-png-bytes').toString('base64');
+  const up = await api('POST', '/api/admin/uploads', { data: png }, { auth: true });
+  assert.equal(up.status, 201);
+  assert.match(up.body.url, /^\/uploads\/[\w-]+\.png$/);
+  const file = await fetch(base + up.body.url);
+  assert.equal(file.status, 200);
+  assert.equal((await api('POST', '/api/admin/uploads', { data: 'data:text/html;base64,PGI+' }, { auth: true })).status, 400);
+
+  const ok = await api('PUT', '/api/admin/settings', { hero_image: up.body.url, gallery: [up.body.url] }, { auth: true });
+  assert.equal(ok.status, 200);
+  assert.deepEqual(JSON.parse(ok.body.settings.gallery), [up.body.url]);
+  const bad = await api('PUT', '/api/admin/settings', { gallery: ['javascript:alert(1)'] }, { auth: true });
+  assert.equal(bad.status, 400);
+  assert.equal((await fetch(base + '/uploads/missing.jpg')).status, 404);
 });
 
 test('settings update and password change', async () => {

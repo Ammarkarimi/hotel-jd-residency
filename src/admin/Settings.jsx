@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
+import Icon from '../lib/Icon.jsx';
 import { useAdmin } from './AdminApp.jsx';
+import PhotoField from './PhotoField.jsx';
+import { uploadPhoto } from './photos.js';
 
 const FIELDS = [
   ['hotel_name', 'Hotel name'],
@@ -91,6 +94,8 @@ export default function Settings() {
         )}
       </section>
 
+      {s && <WebsitePhotos settings={s} onSaved={setS} />}
+
       <section className="card narrow">
         <h2 className="card-title">Change password</h2>
         <form className="aform" onSubmit={changePassword}>
@@ -113,5 +118,105 @@ export default function Settings() {
         </form>
       </section>
     </div>
+  );
+}
+
+function parseList(json) {
+  try {
+    const v = JSON.parse(json || '[]');
+    return Array.isArray(v) ? v : [];
+  } catch {
+    return [];
+  }
+}
+
+function WebsitePhotos({ settings, onSaved }) {
+  const { notify } = useAdmin();
+  const gallery = parseList(settings.gallery);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  async function save(patch, message) {
+    setError('');
+    try {
+      const d = await api('/admin/settings', { method: 'PUT', body: patch });
+      onSaved(d.settings);
+      notify(message);
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function addPhotos(e) {
+    const files = [...(e.target.files || [])];
+    e.target.value = '';
+    if (!files.length) return;
+    setBusy(true);
+    setError('');
+    try {
+      const urls = [];
+      for (const f of files) urls.push(await uploadPhoto(f));
+      await save({ gallery: [...gallery, ...urls] }, `${urls.length} photo${urls.length > 1 ? 's' : ''} added`);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const move = (i, d) => {
+    const next = [...gallery];
+    [next[i], next[i + d]] = [next[i + d], next[i]];
+    save({ gallery: next }, 'Gallery order saved');
+  };
+
+  return (
+    <section className="card">
+      <h2 className="card-title">Website photos</h2>
+      <p className="muted small">
+        Real photos help guests decide. Until you add your own, the website shows 3D illustrations marked
+        &ldquo;Representative image&rdquo;.
+      </p>
+      <PhotoField
+        label="Main banner photo (top of the homepage)"
+        hint="A wide photo of the building, reception or your best room works well."
+        value={settings.hero_image}
+        fallback="/images/hero.jpg"
+        onChange={(url) => save({ hero_image: url }, url ? 'Banner photo updated' : 'Banner photo removed')}
+      />
+      <div className="afield gallery-field">
+        <span>Gallery ({gallery.length})</span>
+        <p className="muted small">The first photo also appears in the &ldquo;About us&rdquo; section. The gallery shows once you add 2 or more photos.</p>
+        <div className="gallery-admin">
+          {gallery.map((src, i) => (
+            <figure key={src}>
+              <img src={src} alt={`Gallery photo ${i + 1}`} />
+              <figcaption>
+                <button type="button" className="icon-btn" aria-label="Move earlier" disabled={i === 0} onClick={() => move(i, -1)}>
+                  <Icon name="chevronLeft" size={16} />
+                </button>
+                <button
+                  type="button"
+                  className="icon-btn"
+                  aria-label="Remove photo"
+                  onClick={() => save({ gallery: gallery.filter((g) => g !== src) }, 'Photo removed')}
+                >
+                  <Icon name="trash" size={16} />
+                </button>
+                <button type="button" className="icon-btn" aria-label="Move later" disabled={i === gallery.length - 1} onClick={() => move(i, 1)}>
+                  <Icon name="chevronRight" size={16} />
+                </button>
+              </figcaption>
+            </figure>
+          ))}
+          <label className={`gallery-add ${busy ? 'is-busy' : ''}`}>
+            <Icon name="plus" size={22} />
+            <span>{busy ? 'Uploading…' : 'Add photos'}</span>
+            <input type="file" accept="image/jpeg,image/png,image/webp" multiple hidden onChange={addPhotos} disabled={busy} />
+          </label>
+        </div>
+      </div>
+      {error && <p className="aerror">{error}</p>}
+    </section>
   );
 }

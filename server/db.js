@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS room_types (
   size_sqft   INTEGER,
   amenities   TEXT NOT NULL DEFAULT '[]',
   image_url   TEXT NOT NULL DEFAULT '',
-  accent      TEXT NOT NULL DEFAULT '#e8b04b',
+  accent      TEXT NOT NULL DEFAULT '#b8862f',
   sort_order  INTEGER NOT NULL DEFAULT 0,
   active      INTEGER NOT NULL DEFAULT 1
 );
@@ -72,7 +72,7 @@ CREATE INDEX IF NOT EXISTS idx_bookings_type ON bookings (room_type_id, status);
 
 export const DEFAULT_SETTINGS = {
   hotel_name: 'Hotel JD Residency',
-  tagline: 'Stay above the ordinary.',
+  tagline: 'Clean, comfortable rooms close to everything.',
   phone: '+91 00000 00000',
   whatsapp: '',
   email: 'stay@jdresidency.in',
@@ -82,6 +82,8 @@ export const DEFAULT_SETTINGS = {
   check_out_time: '11:00',
   currency: 'INR',
   booking_note: 'No advance payment needed. Pay at the hotel when you check in.',
+  hero_image: '',
+  gallery: '[]',
 };
 
 const SEED_ROOM_TYPES = [
@@ -95,7 +97,8 @@ const SEED_ROOM_TYPES = [
     beds: '1 Queen bed',
     size_sqft: 180,
     amenities: ['Air conditioning', 'Free Wi-Fi', 'Smart TV', 'Hot water 24/7', 'Work desk'],
-    accent: '#e8b04b',
+    accent: '#b8862f',
+    image_url: '/images/rooms/deluxe.jpg',
     rooms: ['101', '102', '103', '104'],
     floor: '1',
   },
@@ -109,7 +112,8 @@ const SEED_ROOM_TYPES = [
     beds: '1 King bed',
     size_sqft: 240,
     amenities: ['Air conditioning', 'Free Wi-Fi', 'Smart TV', 'Lounge chair', 'Wardrobe', 'Toiletries'],
-    accent: '#ff5d8f',
+    accent: '#2f6f8f',
+    image_url: '/images/rooms/executive.jpg',
     rooms: ['201', '202', '203', '204'],
     floor: '2',
   },
@@ -123,7 +127,8 @@ const SEED_ROOM_TYPES = [
     beds: '1 King + 1 Single bed',
     size_sqft: 320,
     amenities: ['Air conditioning', 'Free Wi-Fi', 'Smart TV', 'Sitting area', 'Extra storage', 'Toiletries'],
-    accent: '#5de0e6',
+    accent: '#5f8a4c',
+    image_url: '/images/rooms/family.jpg',
     rooms: ['301', '302'],
     floor: '3',
   },
@@ -157,13 +162,13 @@ function seed(db) {
   const { n: types } = db.prepare('SELECT COUNT(*) AS n FROM room_types').get();
   if (types === 0) {
     const insertType = db.prepare(`
-      INSERT INTO room_types (name, tagline, description, price, max_guests, beds, size_sqft, amenities, accent, sort_order)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+      INSERT INTO room_types (name, tagline, description, price, max_guests, beds, size_sqft, amenities, image_url, accent, sort_order)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
     const insertRoom = db.prepare('INSERT INTO rooms (number, room_type_id, floor) VALUES (?, ?, ?)');
     SEED_ROOM_TYPES.forEach((t, i) => {
       const { lastInsertRowid } = insertType.run(
         t.name, t.tagline, t.description, t.price, t.max_guests, t.beds, t.size_sqft,
-        JSON.stringify(t.amenities), t.accent, i,
+        JSON.stringify(t.amenities), t.image_url, t.accent, i,
       );
       for (const number of t.rooms) insertRoom.run(number, lastInsertRowid, t.floor);
     });

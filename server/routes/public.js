@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { publicSettings, transaction } from '../db.js';
 import {
-  HttpError, availability, availableCount, bookingRow, newRef, parseGuest, validateStay,
+  HttpError, availability, availableCount, bookingRow, newRef, parseGuest, today, validateStay,
 } from '../bookings.js';
 
 export function roomTypeOut(t) {
@@ -14,7 +14,8 @@ export function publicRoutes(db) {
   r.get('/info', (_req, res) => {
     const types = db.prepare('SELECT * FROM room_types WHERE active = 1 ORDER BY sort_order, id').all();
     const { n: rooms } = db.prepare("SELECT COUNT(*) AS n FROM rooms WHERE status = 'active'").get();
-    res.json({ settings: publicSettings(db), room_types: types.map(roomTypeOut), room_count: rooms });
+    // `today` is the hotel's date, which can differ from the visitor's around midnight.
+    res.json({ settings: publicSettings(db), room_types: types.map(roomTypeOut), room_count: rooms, today: today() });
   });
 
   r.get('/availability', (req, res) => {

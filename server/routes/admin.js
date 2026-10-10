@@ -1,4 +1,7 @@
 import { Router } from 'express';
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 import { DEFAULT_SETTINGS, publicSettings, transaction } from '../db.js';
 import {
   createToken, setSessionCookie, clearSessionCookie, requireAdmin, verifyPassword, hashPassword, loginLimiter,
@@ -12,7 +15,7 @@ import { roomTypeOut } from './public.js';
 const int = (v) => Number.parseInt(v, 10);
 const str = (v, max = 500) => String(v ?? '').trim().slice(0, max);
 
-export function adminRoutes(db, secret) {
+export function adminRoutes(db, secret, uploadDir) {
   const r = Router();
   const limiter = loginLimiter();
 
@@ -305,7 +308,7 @@ export function adminRoutes(db, secret) {
           .slice(0, 20),
       ),
       image_url: str(body.image_url, 500),
-      accent: /^#[0-9a-f]{6}$/i.test(body.accent) ? body.accent : '#e8b04b',
+      accent: /^#[0-9a-f]{6}$/i.test(body.accent) ? body.accent : '#b8862f',
       sort_order: int(body.sort_order) || 0,
       active: body.active === false || body.active === 0 ? 0 : 1,
     };
@@ -429,15 +432,51 @@ export function adminRoutes(db, secret) {
   r.put('/settings', (req, res) => {
     const body = req.body || {};
     const upsert = db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value');
+    if ('gallery' in body) body.gallery = JSON.stringify(parseGallery(body.gallery));
+    if ('hero_image' in body && body.hero_image && !isImagePath(body.hero_image)) {
+      throw new HttpError(400, 'Hero image must be an uploaded photo or a web link.');
+    }
     transaction(db, () => {
       for (const key of Object.keys(DEFAULT_SETTINGS)) {
-        if (key in body) upsert.run(key, str(body[key], 500));
+        if (key in body) upsert.run(key, str(body[key], key === 'gallery' ? 20000 : 500));
       }
     });
     res.json({ settings: publicSettings(db) });
   });
 
+  /* ---------- photo uploads ---------- */
+
+  r.post('/uploads', (req, res) => {
+    const match = /^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$/.exec(String(req.body?.data || ''));
+    if (!match) throw new HttpError(400, 'Please choose a JPG, PNG or WebP photo.');
+    const buf = Buffer.from(match[2], 'base64');
+    if (buf.length > 6 * 1024 * 1024) throw new HttpError(413, 'Photo is too large (max 6 MB).');
+    const name = `${Date.now().toString(36)}-${crypto.randomBytes(6).toString('hex')}.${match[1] === 'jpeg' ? 'jpg' : match[1]}`;
+    fs.mkdirSync(uploadDir, { recursive: true });
+    fs.writeFileSync(path.join(uploadDir, name), buf);
+    res.status(201).json({ url: `/uploads/${name}` });
+  });
+
   return r;
+}
+
+function isImagePath(s) {
+  return /^(\/uploads\/[\w.-]+|\/images\/[\w./-]+|https:\/\/\S+)$/.test(String(s));
+}
+
+function parseGallery(v) {
+  let list = v;
+  if (typeof v === 'string') {
+    try {
+      list = JSON.parse(v || '[]');
+    } catch {
+      list = [];
+    }
+  }
+  if (!Array.isArray(list)) throw new HttpError(400, 'Gallery must be a list of photos.');
+  const clean = list.map((s) => String(s).trim()).filter(Boolean);
+  if (clean.some((s) => !isImagePath(s))) throw new HttpError(400, 'Gallery photos must be uploaded photos or web links.');
+  return clean.slice(0, 40);
 }
 
 function adminOut(a) {
