@@ -53,7 +53,14 @@ It's a single Node server that serves both the API and the built website. The SQ
 - **Docker** (any VPS, Railway, Fly.io, Render with a disk): `docker build -t jd-residency . && docker run -p 3001:3001 -v jd-data:/data jd-residency`
 - **Plain VPS**: `npm ci && npm run build && npm start` behind nginx or Caddy with HTTPS. Point `DATABASE_PATH` at a backed-up location.
 
-Serverless hosts without a disk (e.g. Vercel functions) won't keep the database between requests.
+### Design preview on Vercel
+
+A preview runs at https://hotel-jd-residency-ammars-projects-e3a53455.vercel.app (`vercel.json` + `api/index.js`).
+Vercel functions have no permanent disk, so the database lives in `/tmp`: it starts with sample bookings
+(`DEMO_DATA=1`) and **resets whenever Vercel starts a fresh instance**. Fine for showing the design; not for real bookings.
+The admin password for the preview is set in the Vercel project's `ADMIN_PASSWORD` environment variable.
+
+Connecting the GitHub repo in the Vercel dashboard (Project → Settings → Git) makes every push redeploy automatically.
 
 Back up the database by copying the `.db` file (plus the `-wal` file if present) and the `uploads/` folder next to it, which holds the photos. Set `UPLOAD_DIR` to store photos elsewhere.
 
