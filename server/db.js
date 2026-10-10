@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { hashPassword } from './auth.js';
+import { addDays, newRef, today } from './bookings.js';
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS settings (
@@ -140,7 +141,35 @@ export function openDb(file = process.env.DATABASE_PATH || 'data/jd-residency.db
   db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
   db.exec(SCHEMA);
   seed(db);
+  if (process.env.DEMO_DATA === '1') seedDemoBookings(db);
   return db;
+}
+
+/** Sample guests so a fresh demo deployment shows a realistic admin panel. */
+function seedDemoBookings(db) {
+  if (db.prepare('SELECT COUNT(*) AS n FROM bookings').get().n > 0) return;
+  const t = today();
+  const room = (number) => db.prepare('SELECT id, room_type_id FROM rooms WHERE number = ?').get(number);
+  const price = (typeId) => db.prepare('SELECT price FROM room_types WHERE id = ?').get(typeId).price;
+  const insert = db.prepare(`
+    INSERT INTO bookings (ref, room_type_id, room_id, guest_name, phone, email, adults, children, check_in, check_out,
+                          total_amount, status, source, special_requests)
+    VALUES (?, ?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?)`);
+  const samples = [
+    ['Rohan Mehta', '98200 11111', '201', 2, 0, -1, 2, 'checked_in', 'phone', ''],
+    ['Priya Shah', '98200 22222', '301', 2, 2, -2, 0, 'checked_in', 'walk_in', ''],
+    ['Arjun Nair', '98200 33333', '101', 1, 0, 0, 1, 'confirmed', 'website', 'Arrival: 3 PM – 6 PM'],
+    ['Sneha Kulkarni', '98200 44444', null, 2, 0, 0, 3, 'pending', 'website', 'Early check-in if possible'],
+    ['Vikram Desai', '98200 55555', '202', 2, 1, 2, 5, 'confirmed', 'ota', ''],
+    ['Fatima Sheikh', '98200 66666', '102', 2, 0, 3, 4, 'confirmed', 'phone', ''],
+    ['Kabir Singh', '98200 77777', null, 4, 0, 6, 9, 'pending', 'website', 'Need an extra pillow'],
+  ];
+  for (const [name, phone, number, adults, children, from, to, status, source, notes] of samples) {
+    const r = number ? room(number) : null;
+    const typeId = r ? r.room_type_id : adults > 3 ? room('301').room_type_id : room('103').room_type_id;
+    insert.run(newRef(db), typeId, r?.id ?? null, name, `+91 ${phone}`, adults, children, addDays(t, from), addDays(t, to),
+      price(typeId) * (to - from), status, source, notes);
+  }
 }
 
 function seed(db) {
