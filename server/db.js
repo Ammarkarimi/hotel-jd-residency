@@ -77,6 +77,18 @@ CREATE TABLE IF NOT EXISTS photos (
   data       BYTEA NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- WhatsApp messages sent (or attempted) for a booking, shown in the admin panel.
+CREATE TABLE IF NOT EXISTS notifications (
+  id         SERIAL PRIMARY KEY,
+  booking_id INTEGER REFERENCES bookings(id) ON DELETE CASCADE,
+  kind       TEXT NOT NULL,
+  recipient  TEXT NOT NULL DEFAULT '',
+  status     TEXT NOT NULL,
+  detail     TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_notifications_booking ON notifications (booking_id);
 `;
 
 /** Any fixed number: serialises schema setup and booking writes across server instances. */

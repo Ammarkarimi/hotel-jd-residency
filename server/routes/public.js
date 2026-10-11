@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { LOCK_BOOKINGS, publicSettings } from '../db.js';
+import { notifyOwner } from '../whatsapp.js';
 import {
   HttpError, availability, availableCount, bookingRow, newRef, parseGuest, today, validateStay,
 } from '../bookings.js';
@@ -54,6 +55,8 @@ export function publicRoutes(db) {
       return bookingRow(t, id);
     });
 
+    // Awaited (not fire-and-forget) because serverless functions may pause once the response is sent.
+    await notifyOwner(db, booking, { adminUrl: `${req.protocol}://${req.get('host')}/admin` });
     res.status(201).json({ booking: guestView(booking) });
   });
 

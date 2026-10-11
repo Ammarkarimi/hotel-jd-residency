@@ -3,9 +3,19 @@
   "framework": null,
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
+  "ignoreCommand": "[ \"$VERCEL_ENV\" = \"production\" ] && [ \"$VERCEL_GIT_COMMIT_REF\" != \"main\" ]",
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/index" },
-    { "source": "/uploads/(.*)", "destination": "/api/index" },
-    { "source": "/((?!assets/|images/|favicon\\.svg).*)", "destination": "/index.html" }
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/uploads/(.*)",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/((?!assets/|images/|favicon\\.svg).*)",
+      "destination": "/index.html"
+    }
   ]
 }

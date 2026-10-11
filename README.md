@@ -14,6 +14,30 @@ Website and front-desk panel for Hotel JD Residency.
 
 Hotel only, no restaurant: nothing on the site mentions dining.
 
+## WhatsApp messages
+
+Set up in **/admin → Settings → WhatsApp messages**. Three modes:
+
+| Mode | Owner alert for a new website booking | Guest confirmation |
+|------|---------------------------------------|--------------------|
+| **Off** | – | – |
+| **Ready-made message** (default, no setup) | – (staff see new bookings in the dashboard) | "Send confirmation to guest" opens WhatsApp with the message written; staff press Send from the hotel's WhatsApp |
+| **Automatic** (WhatsApp Business / Cloud API) | Sent automatically to the owner number(s) | Sent by the website when staff press the button, or automatically when a booking is confirmed (optional) |
+
+Configurable: the hotel WhatsApp number guests hear from, the owner number(s) for alerts, the confirmation text
+(ready-made mode), and the API details and template names (automatic mode). Confirming a booking allocates a free
+room automatically if staff haven't chosen one, so the confirmation includes the room number. Every message sent or
+attempted is listed on the booking in the admin panel.
+
+Automatic mode needs a Meta WhatsApp Business setup: a phone number registered with the WhatsApp Cloud API, its
+**Phone number ID**, a permanent **access token**, and two approved **Utility** templates:
+
+- `new_booking_alert`: `New booking {{1}} received. Guest: {{2}} ({{3}}). Room: {{4}}. Check-in: {{5}}. Check-out: {{6}}. Guests: {{7}}. Total: {{8}}. Please open the admin panel to confirm it.`
+- `booking_confirmed`: `Hello {{1}}, your booking {{2}} at {{3}} is confirmed. Room: {{4}}. Check-in: {{5}} from {{6}}. Check-out: {{7}}. Total: {{8}}, payable at the hotel. Address: {{9}}. Please carry a valid photo ID. We look forward to hosting you.`
+
+The access token can be saved in the admin panel (it is never shown again) or set as the `WHATSAPP_TOKEN`
+environment variable. `WHATSAPP_API_VERSION` overrides the Graph API version (default `v23.0`).
+
 ## Run it locally
 
 Requires Node.js 20 or newer. Data is stored in Postgres: set `DATABASE_URL` to use a Postgres server (e.g. Neon); without it, a built-in Postgres (PGlite) keeps data in `data/pglite`, so there's nothing to install for local use.
