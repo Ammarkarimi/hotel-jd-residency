@@ -3,13 +3,13 @@ import { api } from '../lib/api.js';
 import Icon from '../lib/Icon.jsx';
 import { useAdmin } from './AdminApp.jsx';
 import PhotoField from './PhotoField.jsx';
+import WhatsAppSettings from './WhatsAppSettings.jsx';
 import { uploadPhoto } from './photos.js';
 
 const FIELDS = [
   ['hotel_name', 'Hotel name'],
   ['tagline', 'Tagline (shown under the big title)'],
   ['phone', 'Front desk phone'],
-  ['whatsapp', 'WhatsApp number (optional)'],
   ['email', 'Email'],
   ['address', 'Address', 'wide'],
   ['map_query', 'Google Maps search text (what the map pin should find)', 'wide'],
@@ -37,7 +37,9 @@ export default function Settings() {
     setBusy(true);
     setError('');
     try {
-      const d = await api('/admin/settings', { method: 'PUT', body: s });
+      // Only this form's fields: photos and WhatsApp are saved by their own sections.
+      const body = Object.fromEntries(FIELDS.map(([k]) => [k, s[k]]));
+      const d = await api('/admin/settings', { method: 'PUT', body });
       setS(d.settings);
       notify('Hotel details saved. The website shows them right away.');
     } catch (err) {
@@ -93,6 +95,8 @@ export default function Settings() {
           </form>
         )}
       </section>
+
+      <WhatsAppSettings />
 
       {s && <WebsitePhotos settings={s} onSaved={setS} />}
 

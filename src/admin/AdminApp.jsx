@@ -112,6 +112,13 @@ function Shell({ admin, setAdmin }) {
   const [newBooking, setNewBooking] = useState(null);
   const [version, setVersion] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [wa, setWa] = useState(null);
+
+  useEffect(() => {
+    api('/admin/whatsapp')
+      .then((d) => setWa(d.whatsapp))
+      .catch(() => {});
+  }, []);
 
   const loadInventory = useCallback(async () => {
     const [t, r] = await Promise.all([api('/admin/room-types'), api('/admin/rooms')]);
@@ -154,6 +161,8 @@ function Shell({ admin, setAdmin }) {
     reloadInventory: loadInventory,
     openBooking: setOpenBooking,
     newBooking: (preset = {}) => setNewBooking(preset),
+    wa,
+    setWa,
   };
 
   const links = [

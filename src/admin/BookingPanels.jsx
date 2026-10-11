@@ -21,8 +21,9 @@ const ACTIONS = {
 };
 
 export function BookingDrawer({ id, onClose }) {
-  const { rooms, notify, changed, version } = useAdmin();
+  const { rooms, notify, changed, version, wa: waConfig } = useAdmin();
   const [b, setB] = useState(null);
+  const [notifications, setNotifications] = useState([]);
   const [editing, setEditing] = useState(false);
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState(false);
@@ -31,10 +32,11 @@ export function BookingDrawer({ id, onClose }) {
   useEffect(() => {
     let live = true;
     api(`/admin/bookings/${id}`)
-      .then(({ booking }) => {
+      .then(({ booking, notifications }) => {
         if (!live) return;
         setB(booking);
         setNotes(booking.admin_notes);
+        setNotifications(notifications || []);
       })
       .catch((e) => setError(e.message));
     return () => {
@@ -52,10 +54,13 @@ export function BookingDrawer({ id, onClose }) {
     setBusy(true);
     setError('');
     try {
-      const { booking } = await api(`/admin/bookings/${id}`, { method: 'PATCH', body });
+      const { booking, whatsapp, notifications } = await api(`/admin/bookings/${id}`, { method: 'PATCH', body });
       setB(booking);
       setNotes(booking.admin_notes);
-      notify(message);
+      if (notifications) setNotifications(notifications);
+      if (whatsapp?.ok) notify(`${message}. WhatsApp confirmation sent to the guest.`);
+      else if (whatsapp) notify(`${message}, but the WhatsApp message failed: ${whatsapp.error}`, 'err');
+      else notify(message);
       changed();
       return true;
     } catch (e) {
@@ -211,6 +216,10 @@ export function BookingDrawer({ id, onClose }) {
             </div>
             {error && <p className="aerror">{error}</p>}
 
+            {waConfig && waConfig.wa_mode !== 'off' && (
+              <WhatsAppPanel booking={b} wa={waConfig} notifications={notifications} onNotifications={setNotifications} />
+            )}
+
             <label className="afield">
               <span>Staff notes (only visible here)</span>
               <textarea rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="ID checked, advance paid, etc." />
@@ -228,6 +237,86 @@ export function BookingDrawer({ id, onClose }) {
         )}
       </aside>
     </div>
+  );
+}
+
+const NOTE_LABELS = {
+  owner_alert: { sent: 'Owner alerted on WhatsApp', failed: 'Owner alert failed' },
+  guest_confirmation: { sent: 'Confirmation sent to guest', failed: 'Confirmation to guest failed', opened: 'Confirmation opened in WhatsApp' },
+};
+
+function WhatsAppPanel({ booking: b, wa, notifications, onNotifications }) {
+  const { notify } = useAdmin();
+  const [busy, setBusy] = useState(false);
+  const canSend = ['confirmed', 'checked_in'].includes(b.status);
+  const sentBefore = notifications.some((n) => n.kind === 'guest_confirmation' && n.status !== 'failed');
+  const isLink = wa.wa_mode === 'link';
+
+  async function send() {
+    // Open the tab straight away (inside the click) so browsers don't block it, then point it at WhatsApp.
+    const tab = isLink ? window.open('', '_blank') : null;
+    setBusy(true);
+    try {
+      const { whatsapp, notifications: list } = await api(`/admin/bookings/${b.id}/whatsapp-confirmation`, { method: 'POST' });
+      onNotifications(list);
+      if (whatsapp.mode === 'link' && whatsapp.url) {
+        if (tab) tab.location.href = whatsapp.url;
+        else window.location.href = whatsapp.url;
+        notify('WhatsApp opened with the confirmation. Press Send there.');
+      } else if (whatsapp.ok) {
+        notify(`Confirmation sent to ${b.guest_name} on WhatsApp`);
+      } else {
+        notify(`WhatsApp message failed: ${whatsapp.error}`, 'err');
+      }
+    } catch (e) {
+      tab?.close();
+      notify(e.message, 'err');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="wa-panel">
+      <header>
+        <Icon name="whatsapp" size={18} />
+        <b>WhatsApp</b>
+        <small className="muted">{isLink ? 'opens WhatsApp with a ready message' : 'sent automatically'}</small>
+      </header>
+      {canSend ? (
+        <>
+          {!b.room_id && <p className="small muted">Tip: assign a room first so the message tells the guest their room number.</p>}
+          <button className="abtn abtn-wa" disabled={busy} onClick={send}>
+            <Icon name="whatsapp" size={16} />
+            {busy ? 'Sending…' : sentBefore ? 'Send confirmation again' : 'Send confirmation to guest'}
+          </button>
+        </>
+      ) : (
+        <p className="small muted">
+          {b.status === 'pending'
+            ? 'Confirm the booking first, then you can send the guest a WhatsApp confirmation.'
+            : 'Confirmations can be sent for confirmed bookings.'}
+        </p>
+      )}
+      {notifications.length > 0 && (
+        <ul className="wa-log">
+          {notifications.map((n) => (
+            <li key={n.id} className={`wa-${n.status}`}>
+              <Icon name={n.status === 'failed' ? 'alert' : 'check'} size={14} strokeWidth={2.2} />
+              <div>
+                <span>
+                  {NOTE_LABELS[n.kind]?.[n.status] || n.kind} · +{n.recipient}
+                </span>
+                <small>
+                  {new Date(n.created_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}
+                  {n.status === 'failed' && ` · ${n.detail}`}
+                </small>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 

@@ -9,6 +9,10 @@ import {
   parseGuest, roomConflict, today, validateStay,
 } from '../bookings.js';
 import { roomTypeOut } from './public.js';
+import {
+  MODES, WA_DEFAULTS, bookingFields, confirmGuest, normalizeNumber, ownerAlertText, ownerNumbers, ownerTemplateParams,
+  sendTemplate, waConfig, waConfigOut,
+} from '../whatsapp.js';
 
 const int = (v) => Number.parseInt(v, 10);
 const str = (v, max = 500) => String(v ?? '').trim().slice(0, max);
@@ -156,7 +160,19 @@ export function adminRoutes(db, secret) {
   r.get('/bookings/:id', async (req, res) => {
     const b = await bookingRow(db, int(req.params.id));
     if (!b) throw new HttpError(404, 'Booking not found.');
-    res.json({ booking: b });
+    res.json({ booking: b, notifications: await notificationsFor(b.id) });
+  });
+
+  const notificationsFor = (bookingId) =>
+    db.query('SELECT * FROM notifications WHERE booking_id = ? ORDER BY created_at DESC, id DESC', [bookingId]);
+
+  r.post('/bookings/:id/whatsapp-confirmation', async (req, res) => {
+    const b = await bookingRow(db, int(req.params.id));
+    if (!b) throw new HttpError(404, 'Booking not found.');
+    if (!['confirmed', 'checked_in'].includes(b.status)) throw new HttpError(400, 'Confirm the booking first, then send the confirmation.');
+    const whatsapp = await confirmGuest(db, b);
+    if (!whatsapp.ok && whatsapp.mode !== 'api') throw new HttpError(400, whatsapp.error);
+    res.json({ whatsapp, notifications: await notificationsFor(b.id) });
   });
 
   r.post('/bookings', async (req, res) => {
@@ -195,10 +211,12 @@ export function adminRoutes(db, secret) {
   r.patch('/bookings/:id', async (req, res) => {
     const id = int(req.params.id);
     const body = req.body || {};
+    let wasStatus;
     const booking = await db.tx(async (t) => {
       await t.query('SELECT pg_advisory_xact_lock(?)', [LOCK_BOOKINGS]);
       const cur = await t.one('SELECT * FROM bookings WHERE id = ?', [id]);
       if (!cur) throw new HttpError(404, 'Booking not found.');
+      wasStatus = cur.status;
       const next = { ...cur };
 
       if (['guest_name', 'phone', 'email', 'adults', 'children', 'special_requests'].some((k) => k in body)) {
@@ -233,6 +251,11 @@ export function adminRoutes(db, secret) {
       if (next.status === 'checked_in' && !next.room_id) {
         next.room_id = await autoRoom(t, type.id, next.check_in, next.check_out, id);
       }
+      // Confirming a booking allocates a room (if staff haven't picked one), so the
+      // guest's confirmation can tell them their room number. Staff can still change it.
+      if (next.status === 'confirmed' && cur.status === 'pending' && !next.room_id && !('room_id' in body)) {
+        next.room_id = (await freeRoomFor(t, type.id, next.check_in, next.check_out, id))?.id ?? null;
+      }
 
       if ('total_amount' in body && body.total_amount !== '' && body.total_amount !== null) {
         next.total_amount = int(body.total_amount);
@@ -255,7 +278,14 @@ export function adminRoutes(db, secret) {
       );
       return bookingRow(t, id);
     });
-    res.json({ booking });
+
+    // Optionally send the WhatsApp confirmation as soon as staff confirm the booking.
+    let whatsapp;
+    if (booking.status === 'confirmed' && wasStatus === 'pending') {
+      const cfg = await waConfig(db);
+      if (cfg.wa_mode === 'api' && cfg.wa_auto_confirm === '1') whatsapp = await confirmGuest(db, booking);
+    }
+    res.json({ booking, whatsapp, notifications: await notificationsFor(id) });
   });
 
   r.delete('/bookings/:id', async (req, res) => {
@@ -467,6 +497,85 @@ export function adminRoutes(db, secret) {
       }
     });
     res.json({ settings: await publicSettings(db) });
+  });
+
+  /* ---------- WhatsApp ---------- */
+
+  r.get('/whatsapp', async (_req, res) => {
+    const s = await publicSettings(db);
+    res.json({ whatsapp: { ...waConfigOut(await waConfig(db)), sender: s.whatsapp } });
+  });
+
+  r.put('/whatsapp', async (req, res) => {
+    const body = req.body || {};
+    const updates = {};
+    if ('wa_mode' in body) {
+      if (!MODES.includes(body.wa_mode)) throw new HttpError(400, 'Unknown WhatsApp mode.');
+      updates.wa_mode = body.wa_mode;
+    }
+    if ('wa_owner_numbers' in body) {
+      const list = String(body.wa_owner_numbers || '').split(/[,;\n]/).map((n) => n.trim()).filter(Boolean);
+      const bad = list.filter((n) => !normalizeNumber(n));
+      if (bad.length) throw new HttpError(400, `This doesn't look like a WhatsApp number: ${bad[0]}`);
+      updates.wa_owner_numbers = list.join(', ');
+    }
+    if ('wa_phone_number_id' in body) {
+      const v = str(body.wa_phone_number_id, 40);
+      if (v && !/^\d{6,25}$/.test(v)) throw new HttpError(400, 'The phone number ID is the long number from Meta (digits only).');
+      updates.wa_phone_number_id = v;
+    }
+    // The token is write-only: an empty value leaves it unchanged, wa_token_clear removes it.
+    if (body.wa_token_clear) updates.wa_token = '';
+    else if (body.wa_token) updates.wa_token = str(body.wa_token, 1000);
+    for (const key of ['wa_template_owner', 'wa_template_guest']) {
+      if (key in body) {
+        const v = str(body[key], 100) || WA_DEFAULTS[key];
+        if (!/^[a-z0-9_]+$/.test(v)) throw new HttpError(400, 'Template names use only lowercase letters, numbers and _.');
+        updates[key] = v;
+      }
+    }
+    if ('wa_template_lang' in body) {
+      const v = str(body.wa_template_lang, 10) || 'en';
+      if (!/^[a-z]{2,3}(_[A-Z]{2})?$/.test(v)) throw new HttpError(400, 'Template language looks like "en" or "en_US".');
+      updates.wa_template_lang = v;
+    }
+    if ('wa_auto_confirm' in body) updates.wa_auto_confirm = body.wa_auto_confirm ? '1' : '0';
+    if ('wa_guest_message' in body) updates.wa_guest_message = str(body.wa_guest_message, 1500) || WA_DEFAULTS.wa_guest_message;
+    if ('sender' in body) {
+      const v = str(body.sender, 30);
+      if (v && !normalizeNumber(v)) throw new HttpError(400, "The hotel's WhatsApp number doesn't look right.");
+      updates.whatsapp = v;
+    }
+    await db.tx(async (t) => {
+      for (const [key, value] of Object.entries(updates)) {
+        await t.query('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value', [key, value]);
+      }
+    });
+    const s = await publicSettings(db);
+    res.json({ whatsapp: { ...waConfigOut(await waConfig(db)), sender: s.whatsapp } });
+  });
+
+  /** Sends a sample new-booking alert to the owner number(s), to check the setup. */
+  r.post('/whatsapp/test', async (req, res) => {
+    const cfg = await waConfig(db);
+    const numbers = ownerNumbers(cfg);
+    if (!numbers.length) throw new HttpError(400, 'Add the owner WhatsApp number first.');
+    const sample = {
+      id: null, ref: 'JDTEST01', guest_name: 'Test Guest', phone: '+91 98200 00000', room_type_name: 'Deluxe Room',
+      room_number: null, check_in: today(), check_out: addDays(today(), 1), adults: 2, children: 0, total_amount: 2499,
+      special_requests: 'This is a test message',
+    };
+    const fields = bookingFields(sample, await publicSettings(db));
+    const adminUrl = `${req.protocol}://${req.get('host')}/admin`;
+    if (cfg.wa_mode !== 'api') {
+      return res.json({
+        results: numbers.map((to) => ({ to, ok: true, url: `https://wa.me/${to}?text=${encodeURIComponent(ownerAlertText(fields, adminUrl))}` })),
+      });
+    }
+    const results = await Promise.all(
+      numbers.map(async (to) => ({ to, ...(await sendTemplate(cfg, to, cfg.wa_template_owner, ownerTemplateParams(fields))) })),
+    );
+    res.json({ results });
   });
 
   /* ---------- photo uploads (stored in the database) ---------- */

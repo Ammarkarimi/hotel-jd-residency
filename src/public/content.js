@@ -49,7 +49,7 @@ export const FAQ = [
   },
   {
     q: 'How will I know my booking is confirmed?',
-    a: 'You get a booking reference immediately. Our front desk will also call you on the phone number you give us to confirm.',
+    a: 'You get a booking reference immediately. Once we have allocated your room, we send your confirmation on WhatsApp (or call you) on the number you give us.',
   },
   {
     q: 'What do I need to bring at check-in?',

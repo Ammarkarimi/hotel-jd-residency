@@ -359,7 +359,7 @@ function Confirmation({ booking, info }) {
         </div>
         <h1>Booking received</h1>
         <p className="lead">
-          Thank you, {booking.guest_name.split(' ')[0]}. Your room is reserved and we'll call you on your phone shortly to confirm.
+          Thank you, {booking.guest_name.split(' ')[0]}. Your room is reserved. We'll send your confirmation on WhatsApp (or call you) shortly.
         </p>
         <div className="ref-box">
           <span>Booking reference</span>
@@ -403,7 +403,7 @@ function Confirmation({ booking, info }) {
         </dl>
         <h2>What happens next</h2>
         <ol className="next-steps">
-          <li>Our front desk calls you to confirm the booking.</li>
+          <li>We allocate your room and confirm on WhatsApp or by phone.</li>
           <li>On arrival, show a valid government photo ID for each adult.</li>
           <li>Pay at the hotel when you check in.</li>
         </ol>
