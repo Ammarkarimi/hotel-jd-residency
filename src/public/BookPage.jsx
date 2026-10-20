@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api.js';
 import { fmtDate, money, nights, time12 } from '../lib/format.js';
 import Icon from '../lib/Icon.jsx';
+import { KEY_RULE } from './content.js';
 import { RoomImage } from './Home.jsx';
 import { telHref, useInfo, waHref } from './PublicApp.jsx';
 import { DateFields, GuestPicker, guestsLabel, stayFromParams, stayToParams, useToday } from './StaySearch.jsx';
@@ -254,6 +255,23 @@ export default function BookPage() {
                       {error}
                     </p>
                   )}
+                  <div className="book-rules" role="note">
+                    <p className="book-rules-key">
+                      <Icon name="ban" size={18} strokeWidth={2.2} /> {KEY_RULE.title}
+                    </p>
+                    <ul>
+                      <li>Primary guest must be at least 18 years old</li>
+                      <li>Carry a Passport or Aadhaar for every adult. Local IDs are not accepted</li>
+                      <li>No pets, no alcohol and no non-veg food on the property</li>
+                    </ul>
+                    <p className="book-rules-more">
+                      By confirming, you agree to the{' '}
+                      <Link to="/#rules" target="_blank">
+                        house rules
+                      </Link>
+                      .
+                    </p>
+                  </div>
                   <button className="btn btn-primary btn-lg btn-block submit-btn" disabled={busy}>
                     {busy ? 'Confirming…' : `Confirm booking · ${money(selected.total)}`}
                   </button>
@@ -404,7 +422,7 @@ function Confirmation({ booking, info }) {
         <h2>What happens next</h2>
         <ol className="next-steps">
           <li>We allocate your room and confirm on WhatsApp or by phone.</li>
-          <li>On arrival, show a valid government photo ID for each adult.</li>
+          <li>On arrival, show a Passport or Aadhaar for each adult (local IDs are not accepted).</li>
           <li>Pay at the hotel when you check in.</li>
         </ol>
         <div className="confirm-actions">

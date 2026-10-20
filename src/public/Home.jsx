@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { addDays, money, time12 } from '../lib/format.js';
 import Icon from '../lib/Icon.jsx';
-import { ABOUT, AMENITIES, FAQ, NEARBY, PERKS } from './content.js';
+import { ABOUT, AMENITIES, FAQ, KEY_RULE, MUST_READ, NEARBY, PERKS, RULES } from './content.js';
 import { isRepresentative, telHref, useInfo, waHref } from './PublicApp.jsx';
 import RoomDetails from './RoomDetails.jsx';
 import { DateFields, GuestPicker, stayToParams, useToday } from './StaySearch.jsx';
@@ -56,22 +56,30 @@ export default function Home() {
 
       <section id="amenities" className="section">
         <div className="wrap">
-          <SectionHead eyebrow="Amenities" title="Everything you need for a good stay" />
+          <SectionHead eyebrow="Amenities" title="Everything you need for a good stay" text="Comfort, cleanliness and safety, taken care of from the moment you arrive." />
           <ul className="amenity-grid">
             {AMENITIES.map((a) => (
               <li key={a.title} className="amenity">
                 <span className="amenity-icon">
-                  <Icon name={a.icon} size={22} />
+                  <Icon name={a.icon} size={24} />
                 </span>
-                {a.title}
+                <span className="amenity-text">
+                  <b>
+                    {a.title}
+                    {a.paid && <em className="paid-tag">Paid</em>}
+                  </b>
+                  <small>{a.text}</small>
+                </span>
               </li>
             ))}
           </ul>
         </div>
       </section>
 
+      <HouseRules />
+
       {gallery.length > 1 && (
-        <section className="section section-sand">
+        <section className="section">
           <div className="wrap">
             <SectionHead eyebrow="Gallery" title="Take a look around" />
             <div className="gallery">
@@ -85,8 +93,9 @@ export default function Home() {
         </section>
       )}
 
-      <Location s={s} />
-      <Faq s={s} />
+      {/* Sections alternate white and sand; the gallery only shows once photos are added. */}
+      <Location s={s} sand={gallery.length > 1} />
+      <Faq s={s} sand={gallery.length <= 1} />
 
       <section className="cta-band">
         <div className="wrap cta-row">
@@ -287,11 +296,11 @@ function RoomCard({ type, onDetails }) {
   );
 }
 
-function Location({ s }) {
+function Location({ s, sand }) {
   const query = s ? s.map_query || s.address : '';
   const wa = waHref(s?.whatsapp);
   return (
-    <section id="location" className="section">
+    <section id="location" className={`section ${sand ? 'section-sand' : ''}`}>
       <div className="wrap">
         <SectionHead eyebrow="Location" title="How to find us" />
         <div className="location">
@@ -351,10 +360,79 @@ function Location({ s }) {
   );
 }
 
-function Faq({ s }) {
+const RULE_ICON = { no: 'ban', yes: 'check', info: 'info', fee: 'rupee' };
+const RULE_LABEL = { no: 'Not allowed', yes: 'Allowed', info: 'Note', fee: 'Extra charge' };
+
+function RuleItem({ kind, text }) {
+  return (
+    <li className={`rule rule-${kind}`}>
+      <span className="rule-mark" role="img" aria-label={RULE_LABEL[kind]}>
+        <Icon name={RULE_ICON[kind]} size={16} strokeWidth={2.2} />
+      </span>
+      <span>{text}</span>
+    </li>
+  );
+}
+
+function HouseRules() {
+  const [showAll, setShowAll] = useState(false);
+  return (
+    <section id="rules" className="section section-sand">
+      <div className="wrap">
+        <SectionHead eyebrow="House rules" title="Please read before you book" text="These rules help us keep JD Residency safe, quiet and comfortable for every guest." />
+
+        <div className="key-rule" role="note">
+          <span className="key-rule-icon">
+            <Icon name="ban" size={30} strokeWidth={2} />
+          </span>
+          <div>
+            <b>{KEY_RULE.title}</b>
+            <p>{KEY_RULE.text}</p>
+          </div>
+        </div>
+
+        <div className="must-read">
+          <h3>
+            <Icon name="alert" size={20} /> Must-read rules
+          </h3>
+          <ul className="rule-list">
+            {MUST_READ.map((r) => (
+              <RuleItem key={r.text} {...r} />
+            ))}
+          </ul>
+        </div>
+
+        <div className={`rule-grid ${showAll ? 'is-all' : ''}`}>
+          {RULES.map((g) => (
+            <article key={g.title} className="rule-card">
+              <h3>
+                <span className="rule-card-icon">
+                  <Icon name={g.icon} size={20} />
+                </span>
+                {g.title}
+              </h3>
+              <ul className="rule-list">
+                {g.items.map((r) => (
+                  <RuleItem key={r.text} {...r} />
+                ))}
+              </ul>
+            </article>
+          ))}
+        </div>
+        {!showAll && (
+          <button className="btn btn-ghost btn-block rules-more" onClick={() => setShowAll(true)}>
+            Show all house rules <Icon name="plus" size={18} />
+          </button>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function Faq({ s, sand }) {
   const fill = (t) => t.replace('{checkIn}', time12(s?.check_in_time) || '12:00 PM').replace('{checkOut}', time12(s?.check_out_time) || '11:00 AM');
   return (
-    <section id="faq" className="section section-sand">
+    <section id="faq" className={`section ${sand ? 'section-sand' : ''}`}>
       <div className="wrap">
         <SectionHead eyebrow="Good to know" title="Questions & policies" />
         <div className="faq">

@@ -108,9 +108,10 @@ function Header() {
               <small>Hotel</small>
             </span>
           </Link>
-          <nav className={`nav ${open ? 'is-open' : ''}`} aria-label="Main">
+          <nav className={`nav ${open ? 'is-open' : ''}`} aria-label="Main" onClick={() => setOpen(false)}>
             <SectionLink id="rooms">Rooms</SectionLink>
             <SectionLink id="amenities">Amenities</SectionLink>
+            <SectionLink id="rules">House rules</SectionLink>
             <SectionLink id="location">Location</SectionLink>
             <SectionLink id="faq">FAQ</SectionLink>
             <button className="nav-link-btn" onClick={() => { setOpen(false); openFind(); }}>
@@ -178,6 +179,9 @@ function Footer() {
               <button className="linkish" onClick={openFind}>
                 Find my booking
               </button>
+            </li>
+            <li>
+              <SectionLink id="rules">House rules</SectionLink>
             </li>
             <li>
               <SectionLink id="faq">Questions &amp; policies</SectionLink>
