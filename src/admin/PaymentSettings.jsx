@@ -64,7 +64,9 @@ export default function PaymentSettings() {
       ) : (
         <input
           type="password"
-          autoComplete="off"
+          autoComplete="new-password"
+          data-1p-ignore
+          data-lpignore="true"
           value={value}
           onChange={(e) => setValue(e.target.value)}
           placeholder={f[`${key}_set`] ? '•••••••• saved (type to replace)' : placeholder}
