@@ -18,7 +18,11 @@ export const waHref = (num, text = '') => {
 };
 
 /** True when guests pay the full amount online when they book (Razorpay switched on in admin). */
-export const usePayOnline = () => !!useInfo()?.info?.payments?.online;
+export const usePayOnline = () => {
+  const info = useInfo()?.info;
+  // Until hotel info loads, assume the hotel's usual policy (online payment) so "pay at hotel" never flashes.
+  return info ? !!info.payments?.online : true;
+};
 
 /** Default photos shipped with the site are 3D renders, not real photos of the hotel. */
 export const isRepresentative = (url) => !url || url.startsWith('/images/');

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { addDays, money, time12 } from '../lib/format.js';
 import Icon from '../lib/Icon.jsx';
-import { ABOUT, AMENITIES, FAQ, KEY_RULE, MUST_READ, NEARBY, PAY_ONLINE_PERK, PERKS, RULES } from './content.js';
+import { ABOUT, AMENITIES, FAQ, KEY_RULES, MUST_READ, NEARBY, PAY_ONLINE_PERK, PERKS, RULES } from './content.js';
 import { isRepresentative, telHref, useInfo, usePayOnline, waHref } from './PublicApp.jsx';
 import RoomDetails from './RoomDetails.jsx';
 import { DateFields, GuestPicker, stayToParams, useToday } from './StaySearch.jsx';
@@ -77,7 +77,7 @@ export default function Home() {
         </div>
       </section>
 
-      <HouseRules />
+      <HouseRules s={s} />
 
       {gallery.length > 1 && (
         <section className="section">
@@ -181,7 +181,7 @@ function Hero({ info, from }) {
             </p>
           )}
           <h1>{s?.hotel_name || 'Hotel JD Residency'}</h1>
-          <p className="hero-sub">{s?.tagline || 'Comfortable, clean rooms in the heart of the city.'} {online ? 'Book direct and pay securely online.' : 'Book direct and pay at the hotel.'}</p>
+          <p className="hero-sub">{s?.tagline || 'Comfortable, clean rooms in the heart of the city.'} {online ? 'Book direct; full payment at the time of booking.' : 'Book direct and pay at the hotel.'}</p>
         </div>
 
         <form
@@ -203,7 +203,7 @@ function Hero({ info, from }) {
             <p className="search-note">
               <Icon name="check" size={16} strokeWidth={2.2} />
               <span>
-                Rooms from <b>{money(from)}</b>/night · {online ? 'Best price direct · Secure online payment' : 'No prepayment · Pay at hotel'}
+                Rooms from <b>{money(from)}</b>/night · {online ? 'Full payment at the time of booking' : 'No prepayment · Pay at hotel'}
               </span>
             </p>
           )}
@@ -285,7 +285,7 @@ function RoomCard({ type, onDetails }) {
           <div className="price">
             <b>{money(type.price)}</b>
             <span> / night</span>
-            <small>{online ? 'Secure online payment' : 'Pay at hotel'}</small>
+            <small>{online ? 'Full payment at booking' : 'Pay at hotel'}</small>
           </div>
           <div className="room-card-actions">
             <button className="btn btn-ghost" onClick={onDetails}>
@@ -368,33 +368,48 @@ function Location({ s, sand }) {
 const RULE_ICON = { no: 'ban', yes: 'check', info: 'info', fee: 'rupee' };
 const RULE_LABEL = { no: 'Not allowed', yes: 'Allowed', info: 'Note', fee: 'Extra charge' };
 
-function RuleItem({ kind, text }) {
+/** Puts the hotel's check-in and check-out times (from the admin panel) into website text. */
+export const fillTimes = (text, s) =>
+  text.replaceAll('{checkIn}', time12(s?.check_in_time) || '9:00 AM').replaceAll('{checkOut}', time12(s?.check_out_time) || '11:00 AM');
+
+function RuleItem({ kind, text, strong, s }) {
   return (
-    <li className={`rule rule-${kind}`}>
+    <li className={`rule rule-${kind} ${strong ? 'rule-strong' : ''}`}>
       <span className="rule-mark" role="img" aria-label={RULE_LABEL[kind]}>
         <Icon name={RULE_ICON[kind]} size={16} strokeWidth={2.2} />
       </span>
-      <span>{text}</span>
+      <span>{fillTimes(text, s)}</span>
     </li>
   );
 }
 
-function HouseRules() {
+/** The rules shown in red: on the home page and on the booking form. */
+export function KeyRules({ compact = false }) {
+  return (
+    <ul className={`key-rules ${compact ? 'key-rules-compact' : ''}`} role="note" aria-label="Important rules">
+      {KEY_RULES.map((r) => (
+        <li key={r.title} className="key-rule">
+          <span className="key-rule-icon">
+            <Icon name="ban" size={compact ? 18 : 26} strokeWidth={2.2} />
+          </span>
+          <div>
+            <b>{r.title}</b>
+            {!compact && <p>{r.text}</p>}
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function HouseRules({ s }) {
   const [showAll, setShowAll] = useState(false);
   return (
     <section id="rules" className="section section-sand">
       <div className="wrap">
         <SectionHead eyebrow="House rules" title="Please read before you book" text="These rules help us keep JD Residency safe, quiet and comfortable for every guest." />
 
-        <div className="key-rule" role="note">
-          <span className="key-rule-icon">
-            <Icon name="ban" size={30} strokeWidth={2} />
-          </span>
-          <div>
-            <b>{KEY_RULE.title}</b>
-            <p>{KEY_RULE.text}</p>
-          </div>
-        </div>
+        <KeyRules />
 
         <div className="must-read">
           <h3>
@@ -402,7 +417,7 @@ function HouseRules() {
           </h3>
           <ul className="rule-list">
             {MUST_READ.map((r) => (
-              <RuleItem key={r.text} {...r} />
+              <RuleItem key={r.text} {...r} s={s} />
             ))}
           </ul>
         </div>
@@ -418,7 +433,7 @@ function HouseRules() {
               </h3>
               <ul className="rule-list">
                 {g.items.map((r) => (
-                  <RuleItem key={r.text} {...r} />
+                  <RuleItem key={r.text} {...r} s={s} />
                 ))}
               </ul>
             </article>
@@ -436,7 +451,7 @@ function HouseRules() {
 
 function Faq({ s, sand }) {
   const online = usePayOnline();
-  const fill = (t) => t.replace('{checkIn}', time12(s?.check_in_time) || '12:00 PM').replace('{checkOut}', time12(s?.check_out_time) || '11:00 AM');
+  const fill = (t) => fillTimes(t, s);
   return (
     <section id="faq" className={`section ${sand ? 'section-sand' : ''}`}>
       <div className="wrap">

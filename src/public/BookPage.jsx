@@ -4,8 +4,7 @@ import { api } from '../lib/api.js';
 import { fmtDate, money, nights, time12 } from '../lib/format.js';
 import Icon from '../lib/Icon.jsx';
 import { payWithRazorpay } from '../lib/razorpay.js';
-import { KEY_RULE } from './content.js';
-import { RoomImage } from './Home.jsx';
+import { KeyRules, RoomImage } from './Home.jsx';
 import { telHref, useInfo, usePayOnline, waHref } from './PublicApp.jsx';
 import { DateFields, GuestPicker, guestsLabel, stayFromParams, stayToParams, useToday } from './StaySearch.jsx';
 
@@ -307,14 +306,16 @@ export default function BookPage() {
                       {error}
                     </p>
                   )}
-                  <div className="book-rules" role="note">
-                    <p className="book-rules-key">
-                      <Icon name="ban" size={18} strokeWidth={2.2} /> {KEY_RULE.title}
-                    </p>
+                  <div className="book-rules">
+                    <KeyRules compact />
                     <ul>
+                      <li>Carry a Passport or Aadhaar for every adult</li>
                       <li>Primary guest must be at least 18 years old</li>
-                      <li>Carry a Passport or Aadhaar for every adult. Local IDs are not accepted</li>
-                      <li>No pets, no alcohol and no non-veg food on the property</li>
+                      <li>Pets are not allowed</li>
+                      <li>
+                        Check-in from {time12(info.settings.check_in_time)}, check-out by {time12(info.settings.check_out_time)}. Early
+                        check-in: ₹1,000 extra
+                      </li>
                     </ul>
                     <p className="book-rules-more">
                       By confirming, you agree to the{' '}
@@ -383,7 +384,7 @@ export default function BookPage() {
             )}
             <ul className="assure">
               <li>
-                <Icon name={online ? 'shield' : 'wallet'} size={18} /> {online ? 'Secure online payment (UPI, cards, netbanking)' : 'No prepayment. Pay at the hotel'}
+                <Icon name={online ? 'shield' : 'wallet'} size={18} /> {online ? 'Full payment at the time of booking (UPI, cards, netbanking)' : 'No prepayment. Pay at the hotel'}
               </li>
               <li>
                 <Icon name="tag" size={18} /> No booking fees
