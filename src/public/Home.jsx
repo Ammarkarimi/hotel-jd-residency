@@ -2,13 +2,14 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { addDays, money, time12 } from '../lib/format.js';
 import Icon from '../lib/Icon.jsx';
-import { ABOUT, AMENITIES, FAQ, KEY_RULE, MUST_READ, NEARBY, PERKS, RULES } from './content.js';
-import { isRepresentative, telHref, useInfo, waHref } from './PublicApp.jsx';
+import { ABOUT, AMENITIES, FAQ, KEY_RULE, MUST_READ, NEARBY, PAY_ONLINE_PERK, PERKS, RULES } from './content.js';
+import { isRepresentative, telHref, useInfo, usePayOnline, waHref } from './PublicApp.jsx';
 import RoomDetails from './RoomDetails.jsx';
 import { DateFields, GuestPicker, stayToParams, useToday } from './StaySearch.jsx';
 
 export default function Home() {
   const { info } = useInfo();
+  const online = usePayOnline();
   const [details, setDetails] = useState(null);
   const s = info?.settings;
   const types = info?.room_types || [];
@@ -101,7 +102,7 @@ export default function Home() {
         <div className="wrap cta-row">
           <div>
             <h2>Ready to book your stay?</h2>
-            <p>It takes less than a minute. No payment needed now.</p>
+            <p>{online ? 'It takes less than a minute. Pay securely with UPI, card or netbanking.' : 'It takes less than a minute. No payment needed now.'}</p>
           </div>
           <div className="cta-actions">
             <Link to="/book" className="btn btn-gold btn-lg">
@@ -156,6 +157,7 @@ function SectionHead({ eyebrow, title, text }) {
 
 function Hero({ info, from }) {
   const navigate = useNavigate();
+  const online = usePayOnline();
   const today = useToday();
   const [stay, setStay] = useState({ check_in: today, check_out: addDays(today, 1), adults: 2, children: 0 });
   // Once the hotel's date is known, move a check-in that is now in the past.
@@ -179,7 +181,7 @@ function Hero({ info, from }) {
             </p>
           )}
           <h1>{s?.hotel_name || 'Hotel JD Residency'}</h1>
-          <p className="hero-sub">{s?.tagline || 'Comfortable, clean rooms in the heart of the city.'} Book direct and pay at the hotel.</p>
+          <p className="hero-sub">{s?.tagline || 'Comfortable, clean rooms in the heart of the city.'} {online ? 'Book direct and pay securely online.' : 'Book direct and pay at the hotel.'}</p>
         </div>
 
         <form
@@ -201,7 +203,7 @@ function Hero({ info, from }) {
             <p className="search-note">
               <Icon name="check" size={16} strokeWidth={2.2} />
               <span>
-                Rooms from <b>{money(from)}</b>/night · No prepayment · Pay at hotel
+                Rooms from <b>{money(from)}</b>/night · {online ? 'Best price direct · Secure online payment' : 'No prepayment · Pay at hotel'}
               </span>
             </p>
           )}
@@ -212,10 +214,12 @@ function Hero({ info, from }) {
 }
 
 function Perks() {
+  const online = usePayOnline();
+  const perks = online ? [PAY_ONLINE_PERK, ...PERKS.slice(1)] : PERKS;
   return (
     <section className="perks" aria-label="Why book with us">
       <ul className="wrap perk-row">
-        {PERKS.map((p) => (
+        {perks.map((p) => (
           <li key={p.title}>
             <span className="perk-icon">
               <Icon name={p.icon} size={22} />
@@ -248,6 +252,7 @@ export function RoomImage({ type, className = '' }) {
 }
 
 function RoomCard({ type, onDetails }) {
+  const online = usePayOnline();
   return (
     <article className="room-card">
       <button className="room-card-img" onClick={onDetails} aria-label={`View details of ${type.name}`}>
@@ -280,7 +285,7 @@ function RoomCard({ type, onDetails }) {
           <div className="price">
             <b>{money(type.price)}</b>
             <span> / night</span>
-            <small>Pay at hotel</small>
+            <small>{online ? 'Secure online payment' : 'Pay at hotel'}</small>
           </div>
           <div className="room-card-actions">
             <button className="btn btn-ghost" onClick={onDetails}>
@@ -430,6 +435,7 @@ function HouseRules() {
 }
 
 function Faq({ s, sand }) {
+  const online = usePayOnline();
   const fill = (t) => t.replace('{checkIn}', time12(s?.check_in_time) || '12:00 PM').replace('{checkOut}', time12(s?.check_out_time) || '11:00 AM');
   return (
     <section id="faq" className={`section ${sand ? 'section-sand' : ''}`}>
@@ -442,7 +448,7 @@ function Faq({ s, sand }) {
                 {f.q}
                 <Icon name="plus" size={18} />
               </summary>
-              <p>{fill(f.a)}</p>
+              <p>{fill((online && f.aOnline) || f.a)}</p>
             </details>
           ))}
         </div>

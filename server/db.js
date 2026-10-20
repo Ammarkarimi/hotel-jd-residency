@@ -59,7 +59,7 @@ CREATE TABLE IF NOT EXISTS bookings (
   check_out        TEXT NOT NULL,
   total_amount     INTEGER NOT NULL DEFAULT 0,
   status           TEXT NOT NULL DEFAULT 'pending'
-                   CHECK (status IN ('pending','confirmed','checked_in','checked_out','cancelled','no_show')),
+                   CHECK (status IN ('awaiting_payment','pending','confirmed','checked_in','checked_out','cancelled','no_show')),
   source           TEXT NOT NULL DEFAULT 'website',
   special_requests TEXT NOT NULL DEFAULT '',
   admin_notes      TEXT NOT NULL DEFAULT '',
@@ -68,6 +68,23 @@ CREATE TABLE IF NOT EXISTS bookings (
   CHECK (check_out > check_in)
 );
 
+-- Added for online payments; ALTERs bring older databases up to date.
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS payment_status   TEXT NOT NULL DEFAULT 'none';
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS amount_paid      INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS payment_order_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS payment_id       TEXT NOT NULL DEFAULT '';
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS paid_at          TIMESTAMPTZ;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS hold_until       TIMESTAMPTZ;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                 WHERE conname = 'bookings_status_check' AND pg_get_constraintdef(oid) LIKE '%awaiting_payment%') THEN
+    ALTER TABLE bookings DROP CONSTRAINT IF EXISTS bookings_status_check;
+    ALTER TABLE bookings ADD CONSTRAINT bookings_status_check
+      CHECK (status IN ('awaiting_payment','pending','confirmed','checked_in','checked_out','cancelled','no_show'));
+  END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS idx_bookings_order ON bookings (payment_order_id) WHERE payment_order_id <> '';
 CREATE INDEX IF NOT EXISTS idx_bookings_dates ON bookings (check_in, check_out);
 CREATE INDEX IF NOT EXISTS idx_bookings_type ON bookings (room_type_id, status);
 

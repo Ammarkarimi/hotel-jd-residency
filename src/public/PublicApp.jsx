@@ -17,6 +17,9 @@ export const waHref = (num, text = '') => {
   return `https://wa.me/${d.length === 10 ? `91${d}` : d}${text ? `?text=${encodeURIComponent(text)}` : ''}`;
 };
 
+/** True when guests pay the full amount online when they book (Razorpay switched on in admin). */
+export const usePayOnline = () => !!useInfo()?.info?.payments?.online;
+
 /** Default photos shipped with the site are 3D renders, not real photos of the hotel. */
 export const isRepresentative = (url) => !url || url.startsWith('/images/');
 
@@ -81,6 +84,7 @@ export function SectionLink({ id, children, className }) {
 
 function Header() {
   const { info, openFind } = useInfo();
+  const online = usePayOnline();
   const [open, setOpen] = useState(false);
   const s = info?.settings;
   const { pathname } = useLocation();
@@ -90,7 +94,7 @@ function Header() {
       <div className="topbar">
         <div className="wrap topbar-row">
           <span>
-            <Icon name="wallet" size={15} /> Book direct: no prepayment, pay at the hotel
+            <Icon name="wallet" size={15} /> {online ? 'Book direct: best price, secure online payment' : 'Book direct: no prepayment, pay at the hotel'}
           </span>
           {s?.phone && (
             <a href={telHref(s.phone)}>

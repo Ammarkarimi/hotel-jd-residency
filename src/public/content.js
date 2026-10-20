@@ -8,6 +8,9 @@ export const PERKS = [
   { icon: 'wifi', title: 'Free Wi-Fi', text: 'In every room' },
 ];
 
+// Replaces the first perk when guests pay online.
+export const PAY_ONLINE_PERK = { icon: 'shield', title: 'Secure payment', text: 'UPI, cards & netbanking' };
+
 export const AMENITIES = [
   { icon: 'snow', title: 'Air conditioning', text: 'In every room' },
   { icon: 'wifi', title: 'WiFi', text: 'Stay connected' },
@@ -133,6 +136,7 @@ export const ABOUT = {
 };
 
 // {checkIn} and {checkOut} are replaced with the times set in the admin panel.
+// `aOnline` is shown instead of `a` when online payment is switched on.
 export const FAQ = [
   {
     q: 'What are the check-in and check-out times?',
@@ -141,6 +145,8 @@ export const FAQ = [
   {
     q: 'Do I need to pay when I book online?',
     a: 'No. Booking on this website is free and needs no advance payment. You pay at the hotel when you check in.',
+    aOnline:
+      'Yes. The full amount is paid online when you book, securely through Razorpay with UPI, cards, netbanking or wallets. Your booking is confirmed once the payment is received.',
   },
   {
     q: 'How will I know my booking is confirmed?',

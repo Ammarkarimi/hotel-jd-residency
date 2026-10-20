@@ -39,6 +39,7 @@ export function time12(t) {
 }
 
 export const STATUS_LABELS = {
+  awaiting_payment: 'Awaiting payment',
   pending: 'Pending',
   confirmed: 'Confirmed',
   checked_in: 'Checked in',
