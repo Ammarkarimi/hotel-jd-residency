@@ -1,13 +1,16 @@
 import crypto from 'node:crypto';
 
-export const ACTIVE_STATUSES = ['pending', 'confirmed', 'checked_in'];
-export const ALL_STATUSES = ['pending', 'confirmed', 'checked_in', 'checked_out', 'cancelled', 'no_show'];
+// 'awaiting_payment' bookings hold a room while the guest pays online (see HOLD_MINUTES).
+export const ACTIVE_STATUSES = ['awaiting_payment', 'pending', 'confirmed', 'checked_in'];
+export const ALL_STATUSES = ['awaiting_payment', 'pending', 'confirmed', 'checked_in', 'checked_out', 'cancelled', 'no_show'];
+export const HOLD_MINUTES = 20;
 const ACTIVE_SQL = `('${ACTIVE_STATUSES.join("','")}')`;
 
 export class HttpError extends Error {
   constructor(status, message) {
     super(message);
     this.status = status;
+    this.expose = true; // the message is written for guests and staff, so show it even for 5xx
   }
 }
 
@@ -62,8 +65,17 @@ export async function availableCount(db, roomTypeId, checkIn, checkOut, excludeB
   return Math.max(0, sellable - booked);
 }
 
+/** Releases rooms held for online payments that were never completed. */
+export function expireHolds(db) {
+  return db.query(
+    `UPDATE bookings SET status = 'cancelled', payment_status = 'expired', updated_at = now()
+     WHERE status = 'awaiting_payment' AND hold_until < now()`,
+  );
+}
+
 export async function availability(db, checkIn, checkOut, guests = 1) {
   const nights = validateStay(checkIn, checkOut);
+  await expireHolds(db);
   const types = await db.query('SELECT * FROM room_types WHERE active = 1 ORDER BY sort_order, id');
   return Promise.all(
     types.map(async (t) => ({

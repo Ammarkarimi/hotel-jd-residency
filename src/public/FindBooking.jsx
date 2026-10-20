@@ -6,7 +6,8 @@ import { useEscape } from './effects.jsx';
 import { telHref, useInfo } from './PublicApp.jsx';
 
 const LABELS = {
-  pending: 'Received, awaiting confirmation call',
+  awaiting_payment: 'Waiting for payment',
+  pending: 'Received, awaiting confirmation',
   confirmed: 'Confirmed',
   checked_in: 'Checked in',
   checked_out: 'Completed',
@@ -73,7 +74,7 @@ export default function FindBooking({ onClose }) {
               {fmtDate(result.check_out, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
             </p>
             <p>
-              Total <b>{money(result.total_amount)}</b>, pay at hotel
+              Total <b>{money(result.total_amount)}</b>, {result.payment_status === 'paid' ? 'paid online' : 'pay at hotel'}
             </p>
             {info?.settings.phone && (
               <p className="muted small">

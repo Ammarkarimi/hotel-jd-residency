@@ -3,9 +3,10 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api.js';
 import { fmtDate, money, nights, time12 } from '../lib/format.js';
 import Icon from '../lib/Icon.jsx';
+import { payWithRazorpay } from '../lib/razorpay.js';
 import { KEY_RULE } from './content.js';
 import { RoomImage } from './Home.jsx';
-import { telHref, useInfo, waHref } from './PublicApp.jsx';
+import { telHref, useInfo, usePayOnline, waHref } from './PublicApp.jsx';
 import { DateFields, GuestPicker, guestsLabel, stayFromParams, stayToParams, useToday } from './StaySearch.jsx';
 
 const ARRIVAL = ['Not sure yet', 'Before 12 PM', '12 PM – 3 PM', '3 PM – 6 PM', '6 PM – 9 PM', 'After 9 PM'];
@@ -13,6 +14,7 @@ const blankGuest = { guest_name: '', phone: '', email: '', arrival: ARRIVAL[0], 
 
 export default function BookPage() {
   const { info } = useInfo();
+  const online = usePayOnline();
   const [params, setParams] = useSearchParams();
   const today = useToday();
   const stay = useMemo(() => stayFromParams(params, today), [params, today]);
@@ -25,6 +27,8 @@ export default function BookPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [done, setDone] = useState(null);
+  // A booking created with online payment, waiting for the guest to pay: { booking, payment }.
+  const [unpaid, setUnpaid] = useState(null);
   const detailsRef = useRef(null);
 
   const setStay = (next) => setParams(stayToParams(next, { room: wantedRoom }), { replace: true });
@@ -64,8 +68,9 @@ export default function BookPage() {
     setError('');
     setBusy(true);
     const notes = [guest.arrival !== ARRIVAL[0] && `Arrival: ${guest.arrival}`, guest.special_requests].filter(Boolean).join(' · ');
+    let created;
     try {
-      const { booking } = await api('/public/bookings', {
+      created = await api('/public/bookings', {
         method: 'POST',
         body: {
           ...stay,
@@ -77,16 +82,63 @@ export default function BookPage() {
           website: guest.website,
         },
       });
-      setDone(booking);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
       setError(err.message);
-    } finally {
       setBusy(false);
+      return;
+    }
+    if (created.payment) {
+      setUnpaid(created);
+      window.scrollTo({ top: 0 });
+      await pay(created);
+    } else {
+      finish(created.booking);
+    }
+  }
+
+  function finish(booking) {
+    setBusy(false);
+    setDone(booking);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  async function pay({ booking, payment }) {
+    setError('');
+    setBusy(true);
+    let result;
+    try {
+      result = await payWithRazorpay(payment);
+    } catch (err) {
+      setError(err.message);
+      setBusy(false);
+      return;
+    }
+    if (!result) return setBusy(false); // payment window closed: the guest can try again
+    try {
+      const { booking: paid } = await api(`/public/bookings/${booking.ref}/payment`, { method: 'POST', body: result });
+      finish(paid);
+    } catch {
+      // The money has left the guest's account; Razorpay's webhook completes the booking.
+      finish({ ...booking, payment_status: 'verifying' });
     }
   }
 
   if (done) return <Confirmation booking={done} info={info} />;
+  if (unpaid) {
+    return (
+      <PaymentDue
+        unpaid={unpaid}
+        info={info}
+        busy={busy}
+        error={error}
+        onPay={() => pay(unpaid)}
+        onBack={() => {
+          setUnpaid(null);
+          setError('');
+        }}
+      />
+    );
+  }
 
   const step = selected ? 2 : 1;
 
@@ -96,7 +148,7 @@ export default function BookPage() {
         <div className="book-head">
           <h1>Book your stay</h1>
           <ol className="steps" aria-label="Booking steps">
-            {['Choose room', 'Your details', 'Confirmed'].map((label, i) => (
+            {['Choose room', 'Your details', online ? 'Pay & confirm' : 'Confirmed'].map((label, i) => (
               <li key={label} className={i + 1 < step ? 'is-done' : i + 1 === step ? 'is-current' : ''} aria-current={i + 1 === step ? 'step' : undefined}>
                 <span>{i + 1 < step ? <Icon name="check" size={14} strokeWidth={2.6} /> : i + 1}</span>
                 <em className="step-label">{label}</em>
@@ -273,9 +325,16 @@ export default function BookPage() {
                     </p>
                   </div>
                   <button className="btn btn-primary btn-lg btn-block submit-btn" disabled={busy}>
-                    {busy ? 'Confirming…' : `Confirm booking · ${money(selected.total)}`}
+                    {busy ? (online ? 'Opening payment…' : 'Confirming…') : online ? `Pay ${money(selected.total)} & book` : `Confirm booking · ${money(selected.total)}`}
                   </button>
-                  <p className="fine">No payment now. You pay {money(selected.total)} at the hotel when you check in.</p>
+                  {online ? (
+                    <p className="fine pay-fine">
+                      <Icon name="shield" size={15} /> Secure payment by Razorpay: UPI, cards, netbanking and wallets. Your room is held for{' '}
+                      {info.payments.hold_minutes} minutes while you pay.
+                    </p>
+                  ) : (
+                    <p className="fine">No payment now. You pay {money(selected.total)} at the hotel when you check in.</p>
+                  )}
                 </form>
               )}
             </section>
@@ -324,7 +383,7 @@ export default function BookPage() {
             )}
             <ul className="assure">
               <li>
-                <Icon name="wallet" size={18} /> No prepayment. Pay at the hotel
+                <Icon name={online ? 'shield' : 'wallet'} size={18} /> {online ? 'Secure online payment (UPI, cards, netbanking)' : 'No prepayment. Pay at the hotel'}
               </li>
               <li>
                 <Icon name="tag" size={18} /> No booking fees
@@ -357,7 +416,7 @@ export default function BookPage() {
             }}
             disabled={busy}
           >
-            Confirm booking
+            {online ? 'Pay & book' : 'Confirm booking'}
           </button>
         </div>
       )}
@@ -365,8 +424,69 @@ export default function BookPage() {
   );
 }
 
+function PaymentDue({ unpaid: { booking }, info, busy, error, onPay, onBack }) {
+  const phone = info?.settings.phone;
+  return (
+    <main className="book-page">
+      <div className="wrap confirm">
+        <div className="confirm-icon confirm-icon-wait">
+          <Icon name="wallet" size={34} />
+        </div>
+        <h1>Complete your payment</h1>
+        <p className="lead">
+          Your {booking.room_type_name} is held for {info.payments.hold_minutes} minutes. Pay {money(booking.total_amount)} to confirm the
+          booking.
+        </p>
+        <dl className="confirm-grid">
+          <div>
+            <dt>Check-in</dt>
+            <dd>{fmtDate(booking.check_in, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}</dd>
+          </div>
+          <div>
+            <dt>Check-out</dt>
+            <dd>{fmtDate(booking.check_out, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}</dd>
+          </div>
+          <div>
+            <dt>Guests</dt>
+            <dd>{guestsLabel(booking)}</dd>
+          </div>
+          <div className="confirm-total">
+            <dt>Amount to pay</dt>
+            <dd className="strong">{money(booking.total_amount)}</dd>
+          </div>
+        </dl>
+        {error && (
+          <p className="alert alert-error" role="alert">
+            {error}
+          </p>
+        )}
+        <div className="confirm-actions">
+          <button className="btn btn-ghost" onClick={onBack} disabled={busy}>
+            Change booking
+          </button>
+          <button className="btn btn-primary btn-lg" onClick={onPay} disabled={busy}>
+            <Icon name="shield" size={18} /> {busy ? 'Opening payment…' : `Pay ${money(booking.total_amount)}`}
+          </button>
+        </div>
+        <p className="muted small">
+          If money was taken from your account but you don't see a confirmation, don't pay again
+          {phone ? (
+            <>
+              . Call us on <a href={telHref(phone)}>{phone}</a> with reference <b>{booking.ref}</b>.
+            </>
+          ) : (
+            <>. Contact the hotel with reference {booking.ref}.</>
+          )}
+        </p>
+      </div>
+    </main>
+  );
+}
+
 function Confirmation({ booking, info }) {
   const s = info?.settings;
+  const paid = booking.payment_status === 'paid';
+  const verifying = booking.payment_status === 'verifying';
   const wa = waHref(s?.whatsapp, `Hi, I just booked at JD Residency. My booking reference is ${booking.ref}.`);
   const [copied, setCopied] = useState(false);
   return (
@@ -375,9 +495,12 @@ function Confirmation({ booking, info }) {
         <div className="confirm-icon">
           <Icon name="check" size={36} strokeWidth={2.4} />
         </div>
-        <h1>Booking received</h1>
+        <h1>{paid ? 'Payment received' : verifying ? 'Payment being confirmed' : 'Booking received'}</h1>
         <p className="lead">
-          Thank you, {booking.guest_name.split(' ')[0]}. Your room is reserved. We'll send your confirmation on WhatsApp (or call you) shortly.
+          Thank you, {booking.guest_name.split(' ')[0]}.{' '}
+          {verifying
+            ? 'We are confirming your payment with the bank. This usually takes a few seconds; you will get your confirmation on WhatsApp.'
+            : `Your room is reserved${paid ? ' and fully paid' : ''}. We'll send your confirmation on WhatsApp (or call you) shortly.`}
         </p>
         <div className="ref-box">
           <span>Booking reference</span>
@@ -415,15 +538,15 @@ function Confirmation({ booking, info }) {
             </dd>
           </div>
           <div className="confirm-total">
-            <dt>Total (pay at hotel)</dt>
-            <dd className="strong">{money(booking.total_amount)}</dd>
+            <dt>{paid ? 'Total paid online' : verifying ? 'Total (payment being confirmed)' : 'Total (pay at hotel)'}</dt>
+            <dd className="strong">{money(paid ? booking.amount_paid : booking.total_amount)}</dd>
           </div>
         </dl>
         <h2>What happens next</h2>
         <ol className="next-steps">
           <li>We allocate your room and confirm on WhatsApp or by phone.</li>
           <li>On arrival, show a Passport or Aadhaar for each adult (local IDs are not accepted).</li>
-          <li>Pay at the hotel when you check in.</li>
+          {!paid && !verifying && <li>Pay at the hotel when you check in.</li>}
         </ol>
         <div className="confirm-actions">
           <button className="btn btn-ghost" onClick={() => window.print()}>

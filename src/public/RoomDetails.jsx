@@ -4,11 +4,13 @@ import { money } from '../lib/format.js';
 import Icon from '../lib/Icon.jsx';
 import { SceneBoundary, hasWebGL, useEscape } from './effects.jsx';
 import { RoomImage } from './Home.jsx';
+import { usePayOnline } from './PublicApp.jsx';
 
 const RoomScene = lazy(() => import('../three/RoomScene.jsx'));
 
 export default function RoomDetails({ type, onClose }) {
   const webgl = useMemo(hasWebGL, []);
+  const online = usePayOnline();
   const [view, setView] = useState('photo');
   useEscape(onClose);
   return (
@@ -72,7 +74,7 @@ export default function RoomDetails({ type, onClose }) {
             <div className="price">
               <b>{money(type.price)}</b>
               <span> / night</span>
-              <small>No prepayment · Pay at hotel</small>
+              <small>{online ? 'Secure online payment' : 'No prepayment · Pay at hotel'}</small>
             </div>
             <Link className="btn btn-primary btn-lg" to={`/book?room=${type.id}`}>
               Book this room

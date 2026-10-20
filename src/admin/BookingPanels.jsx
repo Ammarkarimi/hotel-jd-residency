@@ -5,6 +5,10 @@ import Icon from '../lib/Icon.jsx';
 import { Modal, StatusPill, useAdmin } from './AdminApp.jsx';
 
 const ACTIONS = {
+  awaiting_payment: [
+    ['confirmed', 'Confirm without online payment', ''],
+    ['cancelled', 'Cancel', 'danger'],
+  ],
   pending: [
     ['confirmed', 'Confirm booking', 'primary'],
     ['cancelled', 'Cancel', 'danger'],
@@ -58,7 +62,7 @@ export function BookingDrawer({ id, onClose }) {
       setB(booking);
       setNotes(booking.admin_notes);
       if (notifications) setNotifications(notifications);
-      if (whatsapp?.ok) notify(`${message}. WhatsApp confirmation sent to the guest.`);
+      if (whatsapp?.ok) notify(`${message}. WhatsApp ${whatsapp.kind === 'review_request' ? 'review link' : 'confirmation'} sent to the guest.`);
       else if (whatsapp) notify(`${message}, but the WhatsApp message failed: ${whatsapp.error}`, 'err');
       else notify(message);
       changed();
@@ -165,6 +169,12 @@ export function BookingDrawer({ id, onClose }) {
                 <dt>Total</dt>
                 <dd className="strong">{money(b.total_amount)}</dd>
               </div>
+              <div className="span-2">
+                <dt>Payment</dt>
+                <dd>
+                  <PaymentState booking={b} />
+                </dd>
+              </div>
               <div>
                 <dt>Source</dt>
                 <dd>{SOURCE_LABELS[b.source] || b.source}</dd>
@@ -240,31 +250,64 @@ export function BookingDrawer({ id, onClose }) {
   );
 }
 
+function PaymentState({ booking: b }) {
+  if (b.payment_status === 'paid') {
+    return (
+      <span className="pay-state">
+        <span className="pay-paid">
+          <Icon name="check" size={15} strokeWidth={2.4} /> Paid online {money(b.amount_paid)}
+        </span>
+        {b.payment_id && (
+          <a href={`https://dashboard.razorpay.com/app/payments/${b.payment_id}`} target="_blank" rel="noreferrer">
+            {b.payment_id} <Icon name="external" size={13} />
+          </a>
+        )}
+      </span>
+    );
+  }
+  if (b.payment_status === 'awaiting' && b.status !== 'awaiting_payment') return <span>Not paid online yet</span>;
+  if (b.payment_status === 'awaiting') {
+    const until = b.hold_until && new Date(b.hold_until).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' });
+    return <span className="pay-wait">Guest is paying online{until ? ` (room held until ${until})` : ''}</span>;
+  }
+  if (b.payment_status === 'expired') return <span className="muted">Online payment not completed</span>;
+  if (b.payment_status === 'failed') return <span className="muted">Online payment could not be started</span>;
+  return <span>At the hotel</span>;
+}
+
 const NOTE_LABELS = {
   owner_alert: { sent: 'Owner alerted on WhatsApp', failed: 'Owner alert failed' },
   guest_confirmation: { sent: 'Confirmation sent to guest', failed: 'Confirmation to guest failed', opened: 'Confirmation opened in WhatsApp' },
+  review_request: { sent: 'Review link sent to guest', failed: 'Review link to guest failed', opened: 'Review link opened in WhatsApp' },
+};
+
+const SENDS = {
+  confirmation: { path: 'whatsapp-confirmation', kind: 'guest_confirmation', what: 'confirmation' },
+  review: { path: 'whatsapp-review', kind: 'review_request', what: 'Google review link' },
 };
 
 function WhatsAppPanel({ booking: b, wa, notifications, onNotifications }) {
   const { notify } = useAdmin();
-  const [busy, setBusy] = useState(false);
-  const canSend = ['confirmed', 'checked_in'].includes(b.status);
-  const sentBefore = notifications.some((n) => n.kind === 'guest_confirmation' && n.status !== 'failed');
+  const [busy, setBusy] = useState('');
+  const canConfirm = ['confirmed', 'checked_in'].includes(b.status);
+  const canReview = b.status === 'checked_out';
+  const sentBefore = (kind) => notifications.some((n) => n.kind === kind && n.status !== 'failed');
   const isLink = wa.wa_mode === 'link';
 
-  async function send() {
+  async function send(which) {
+    const { path, what } = SENDS[which];
     // Open the tab straight away (inside the click) so browsers don't block it, then point it at WhatsApp.
     const tab = isLink ? window.open('', '_blank') : null;
-    setBusy(true);
+    setBusy(which);
     try {
-      const { whatsapp, notifications: list } = await api(`/admin/bookings/${b.id}/whatsapp-confirmation`, { method: 'POST' });
+      const { whatsapp, notifications: list } = await api(`/admin/bookings/${b.id}/${path}`, { method: 'POST' });
       onNotifications(list);
       if (whatsapp.mode === 'link' && whatsapp.url) {
         if (tab) tab.location.href = whatsapp.url;
         else window.location.href = whatsapp.url;
-        notify('WhatsApp opened with the confirmation. Press Send there.');
+        notify(`WhatsApp opened with the ${what}. Press Send there.`);
       } else if (whatsapp.ok) {
-        notify(`Confirmation sent to ${b.guest_name} on WhatsApp`);
+        notify(`${what[0].toUpperCase()}${what.slice(1)} sent to ${b.guest_name} on WhatsApp`);
       } else {
         notify(`WhatsApp message failed: ${whatsapp.error}`, 'err');
       }
@@ -272,7 +315,7 @@ function WhatsAppPanel({ booking: b, wa, notifications, onNotifications }) {
       tab?.close();
       notify(e.message, 'err');
     } finally {
-      setBusy(false);
+      setBusy('');
     }
   }
 
@@ -283,19 +326,30 @@ function WhatsAppPanel({ booking: b, wa, notifications, onNotifications }) {
         <b>WhatsApp</b>
         <small className="muted">{isLink ? 'opens WhatsApp with a ready message' : 'sent automatically'}</small>
       </header>
-      {canSend ? (
-        <>
-          {!b.room_id && <p className="small muted">Tip: assign a room first so the message tells the guest their room number.</p>}
-          <button className="abtn abtn-wa" disabled={busy} onClick={send}>
-            <Icon name="whatsapp" size={16} />
-            {busy ? 'Sending…' : sentBefore ? 'Send confirmation again' : 'Send confirmation to guest'}
-          </button>
-        </>
+      {canConfirm && !b.room_id && <p className="small muted">Tip: assign a room first so the message tells the guest their room number.</p>}
+      {canReview && <p className="small muted">The guest has checked out. Ask them to review the hotel on Google.</p>}
+      {canConfirm || canReview ? (
+        <div className="wa-actions">
+          {canConfirm && (
+            <button className="abtn abtn-wa" disabled={!!busy} onClick={() => send('confirmation')}>
+              <Icon name="whatsapp" size={16} />
+              {busy === 'confirmation' ? 'Sending…' : sentBefore('guest_confirmation') ? 'Send confirmation again' : 'Send confirmation to guest'}
+            </button>
+          )}
+          {canReview && (
+            <button className="abtn abtn-wa" disabled={!!busy} onClick={() => send('review')}>
+              <Icon name="star" size={16} />
+              {busy === 'review' ? 'Sending…' : sentBefore('review_request') ? 'Send review link again' : 'Send Google review link'}
+            </button>
+          )}
+        </div>
       ) : (
         <p className="small muted">
           {b.status === 'pending'
             ? 'Confirm the booking first, then you can send the guest a WhatsApp confirmation.'
-            : 'Confirmations can be sent for confirmed bookings.'}
+            : b.status === 'awaiting_payment'
+              ? 'The guest is still paying online. The booking moves to Pending once the payment is received.'
+              : 'Confirmations can be sent for confirmed bookings, and the review link after check-out.'}
         </p>
       )}
       {notifications.length > 0 && (

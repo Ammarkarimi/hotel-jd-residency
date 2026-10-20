@@ -1325,6 +1325,7 @@ button.field-box {
   background: var(--success-soft);
   color: var(--success);
 }
+.badge-awaiting_payment,
 .badge-pending {
   background: var(--warn-soft);
   color: var(--warn);
@@ -1644,6 +1645,16 @@ button.field-box {
   font-size: 0.85rem;
   color: var(--muted);
 }
+.pay-fine {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+}
+.pay-fine .icon {
+  flex: none;
+  margin-top: 3px;
+  color: var(--success);
+}
 
 .summary {
   position: sticky;
@@ -1735,6 +1746,10 @@ button.field-box {
   border-radius: 50%;
   background: var(--success-soft);
   color: var(--success);
+}
+.confirm-icon-wait {
+  background: var(--gold-soft);
+  color: var(--gold);
 }
 .site .confirm h1 {
   margin: 16px 0 8px;

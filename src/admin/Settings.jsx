@@ -3,6 +3,7 @@ import { api } from '../lib/api.js';
 import Icon from '../lib/Icon.jsx';
 import { useAdmin } from './AdminApp.jsx';
 import PhotoField from './PhotoField.jsx';
+import PaymentSettings from './PaymentSettings.jsx';
 import WhatsAppSettings from './WhatsAppSettings.jsx';
 import { uploadPhoto } from './photos.js';
 
@@ -96,6 +97,7 @@ export default function Settings() {
         )}
       </section>
 
+      <PaymentSettings />
       <WhatsAppSettings />
 
       {s && <WebsitePhotos settings={s} onSaved={setS} />}

@@ -5,13 +5,14 @@ import {
   createToken, setSessionCookie, clearSessionCookie, requireAdmin, verifyPassword, hashPassword, loginLimiter,
 } from '../auth.js';
 import {
-  ACTIVE_STATUSES, ALL_STATUSES, HttpError, addDays, availableCount, bookingRow, freeRoomFor, isDate, newRef,
-  parseGuest, roomConflict, today, validateStay,
+  ACTIVE_STATUSES, ALL_STATUSES, HttpError, addDays, availableCount, bookingRow, expireHolds, freeRoomFor, isDate,
+  newRef, parseGuest, roomConflict, today, validateStay,
 } from '../bookings.js';
+import { PAY_MODES, payConfig, payConfigOut } from '../payments.js';
 import { roomTypeOut } from './public.js';
 import {
-  MODES, WA_DEFAULTS, bookingFields, confirmGuest, normalizeNumber, ownerAlertText, ownerNumbers, ownerTemplateParams,
-  sendTemplate, waConfig, waConfigOut,
+  MODES, WA_DEFAULTS, askForReview, bookingFields, confirmGuest, normalizeNumber, ownerAlertText, ownerNumbers,
+  ownerTemplateParams, sendTemplate, waConfig, waConfigOut,
 } from '../whatsapp.js';
 
 const int = (v) => Number.parseInt(v, 10);
@@ -64,6 +65,7 @@ export function adminRoutes(db, secret) {
   /* ---------- dashboard ---------- */
 
   r.get('/dashboard', async (_req, res) => {
+    await expireHolds(db);
     const t = today();
     const count = async (sql, args = []) => (await db.one(sql, args)).n;
     const monthStart = t.slice(0, 8) + '01';
@@ -129,6 +131,7 @@ export function adminRoutes(db, secret) {
   /* ---------- bookings ---------- */
 
   r.get('/bookings', async (req, res) => {
+    await expireHolds(db);
     const where = [];
     const args = [];
     const { status, q, view } = req.query;
@@ -175,6 +178,15 @@ export function adminRoutes(db, secret) {
     res.json({ whatsapp, notifications: await notificationsFor(b.id) });
   });
 
+  r.post('/bookings/:id/whatsapp-review', async (req, res) => {
+    const b = await bookingRow(db, int(req.params.id));
+    if (!b) throw new HttpError(404, 'Booking not found.');
+    if (b.status !== 'checked_out') throw new HttpError(400, 'The review link can be sent once the guest has checked out.');
+    const whatsapp = await askForReview(db, b);
+    if (!whatsapp.ok && whatsapp.mode !== 'api') throw new HttpError(400, whatsapp.error);
+    res.json({ whatsapp, notifications: await notificationsFor(b.id) });
+  });
+
   r.post('/bookings', async (req, res) => {
     const body = req.body || {};
     const nights = validateStay(body.check_in, body.check_out, { allowPast: true });
@@ -184,6 +196,7 @@ export function adminRoutes(db, secret) {
 
     const booking = await db.tx(async (t) => {
       await t.query('SELECT pg_advisory_xact_lock(?)', [LOCK_BOOKINGS]);
+      await expireHolds(t);
       const type = await t.one('SELECT * FROM room_types WHERE id = ?', [int(body.room_type_id)]);
       if (!type) throw new HttpError(400, 'Please choose a room type.');
       if (ACTIVE_STATUSES.includes(status) && (await availableCount(t, type.id, body.check_in, body.check_out)) < 1) {
@@ -214,6 +227,7 @@ export function adminRoutes(db, secret) {
     let wasStatus;
     const booking = await db.tx(async (t) => {
       await t.query('SELECT pg_advisory_xact_lock(?)', [LOCK_BOOKINGS]);
+      await expireHolds(t);
       const cur = await t.one('SELECT * FROM bookings WHERE id = ?', [id]);
       if (!cur) throw new HttpError(404, 'Booking not found.');
       wasStatus = cur.status;
@@ -279,11 +293,15 @@ export function adminRoutes(db, secret) {
       return bookingRow(t, id);
     });
 
-    // Optionally send the WhatsApp confirmation as soon as staff confirm the booking.
+    // In automatic WhatsApp mode, optionally message the guest when staff confirm the
+    // booking, and send the review link when they check out.
     let whatsapp;
-    if (booking.status === 'confirmed' && wasStatus === 'pending') {
+    if (booking.status !== wasStatus) {
       const cfg = await waConfig(db);
-      if (cfg.wa_mode === 'api' && cfg.wa_auto_confirm === '1') whatsapp = await confirmGuest(db, booking);
+      if (cfg.wa_mode === 'api') {
+        if (booking.status === 'confirmed' && wasStatus === 'pending' && cfg.wa_auto_confirm === '1') whatsapp = await confirmGuest(db, booking);
+        if (booking.status === 'checked_out' && cfg.wa_auto_review === '1' && cfg.review_url) whatsapp = await askForReview(db, booking);
+      }
     }
     res.json({ booking, whatsapp, notifications: await notificationsFor(id) });
   });
@@ -527,7 +545,7 @@ export function adminRoutes(db, secret) {
     // The token is write-only: an empty value leaves it unchanged, wa_token_clear removes it.
     if (body.wa_token_clear) updates.wa_token = '';
     else if (body.wa_token) updates.wa_token = str(body.wa_token, 1000);
-    for (const key of ['wa_template_owner', 'wa_template_guest']) {
+    for (const key of ['wa_template_owner', 'wa_template_guest', 'wa_template_review']) {
       if (key in body) {
         const v = str(body[key], 100) || WA_DEFAULTS[key];
         if (!/^[a-z0-9_]+$/.test(v)) throw new HttpError(400, 'Template names use only lowercase letters, numbers and _.');
@@ -540,7 +558,14 @@ export function adminRoutes(db, secret) {
       updates.wa_template_lang = v;
     }
     if ('wa_auto_confirm' in body) updates.wa_auto_confirm = body.wa_auto_confirm ? '1' : '0';
+    if ('wa_auto_review' in body) updates.wa_auto_review = body.wa_auto_review ? '1' : '0';
     if ('wa_guest_message' in body) updates.wa_guest_message = str(body.wa_guest_message, 1500) || WA_DEFAULTS.wa_guest_message;
+    if ('wa_review_message' in body) updates.wa_review_message = str(body.wa_review_message, 1500) || WA_DEFAULTS.wa_review_message;
+    if ('review_url' in body) {
+      const v = str(body.review_url, 500);
+      if (v && !/^https:\/\/\S+$/.test(v)) throw new HttpError(400, 'The review link should start with https://');
+      updates.review_url = v;
+    }
     if ('sender' in body) {
       const v = str(body.sender, 30);
       if (v && !normalizeNumber(v)) throw new HttpError(400, "The hotel's WhatsApp number doesn't look right.");
@@ -576,6 +601,45 @@ export function adminRoutes(db, secret) {
       numbers.map(async (to) => ({ to, ...(await sendTemplate(cfg, to, cfg.wa_template_owner, ownerTemplateParams(fields))) })),
     );
     res.json({ results });
+  });
+
+  /* ---------- online payments ---------- */
+
+  const paymentsOut = async (req) => ({
+    ...payConfigOut(await payConfig(db)),
+    webhook_url: `${req.protocol}://${req.get('host')}/api/public/payments/razorpay/webhook`,
+  });
+
+  r.get('/payments', async (req, res) => res.json({ payments: await paymentsOut(req) }));
+
+  r.put('/payments', async (req, res) => {
+    const body = req.body || {};
+    const cur = await payConfig(db);
+    const updates = {};
+    if ('rzp_key_id' in body) {
+      const v = str(body.rzp_key_id, 60);
+      if (v && !/^rzp_(test|live)_\w+$/.test(v)) throw new HttpError(400, 'The Key ID starts with rzp_live_ (or rzp_test_ for testing).');
+      updates.rzp_key_id = v;
+    }
+    // Secrets are write-only: an empty value leaves them unchanged, *_clear removes them.
+    for (const key of ['rzp_key_secret', 'rzp_webhook_secret']) {
+      if (body[`${key}_clear`]) updates[key] = '';
+      else if (body[key]) updates[key] = str(body[key], 200);
+    }
+    if ('pay_mode' in body) {
+      if (!PAY_MODES.includes(body.pay_mode)) throw new HttpError(400, 'Unknown payment option.');
+      const next = { ...cur, ...updates };
+      if (body.pay_mode === 'razorpay' && (!next.rzp_key_id || !next.rzp_key_secret)) {
+        throw new HttpError(400, 'Add the Razorpay Key ID and Key Secret before turning on online payment.');
+      }
+      updates.pay_mode = body.pay_mode;
+    }
+    await db.tx(async (t) => {
+      for (const [key, value] of Object.entries(updates)) {
+        await t.query('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value', [key, value]);
+      }
+    });
+    res.json({ payments: await paymentsOut(req) });
   });
 
   /* ---------- photo uploads (stored in the database) ---------- */

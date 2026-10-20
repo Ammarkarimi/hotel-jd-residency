@@ -9,8 +9,10 @@ import { getSettings, publicSettings } from './db.js';
 //   api   – fully automatic through Meta's WhatsApp Cloud API: the owner gets an
 //           alert for every website booking, and confirmations are sent by the server.
 //           WhatsApp only allows businesses to start conversations with approved
-//           message templates, so two templates must exist in WhatsApp Manager
-//           (see README for their exact text).
+//           message templates, so they must exist in WhatsApp Manager (see README
+//           for their exact text).
+//
+// After check-out, guests can also be sent a thank-you with the hotel's Google review link.
 
 export const WA_DEFAULTS = {
   wa_mode: 'link',
@@ -19,8 +21,11 @@ export const WA_DEFAULTS = {
   wa_token: '',
   wa_template_owner: 'new_booking_alert',
   wa_template_guest: 'booking_confirmed',
+  wa_template_review: 'stay_review',
   wa_template_lang: 'en',
   wa_auto_confirm: '0',
+  wa_auto_review: '1',
+  review_url: 'https://search.google.com/local/writereview?placeid=ChIJmwR9PdTJ5zsRlZvHhaw4rHg',
   wa_guest_message: [
     'Hello {name}, your booking at {hotel} is confirmed ✅',
     '',
@@ -29,10 +34,19 @@ export const WA_DEFAULTS = {
     'Check-in: {check_in} (from {check_in_time})',
     'Check-out: {check_out} (until {check_out_time})',
     'Guests: {guests}',
-    'Total: {total}, to be paid at the hotel',
+    'Total: {total} ({payment})',
     '',
     'Address: {address}',
-    'Please carry a valid photo ID for each adult. See you soon!',
+    'Please carry a Passport or Aadhaar for each adult. See you soon!',
+  ].join('\n'),
+  wa_review_message: [
+    'Hello {name}, thank you for staying at {hotel} 🙏',
+    '',
+    'We hope you had a comfortable stay. Could you spare a minute to tell others about it on Google? It helps us a lot.',
+    '',
+    '⭐ {review_link}',
+    '',
+    'We look forward to welcoming you again!',
   ].join('\n'),
 };
 
@@ -88,7 +102,7 @@ const time12 = (t) => {
 };
 
 /** Values that can be used in messages as {name}, {ref}, … */
-export function bookingFields(b, s) {
+export function bookingFields(b, s, cfg = {}) {
   const guests = b.adults + (b.children || 0);
   return {
     name: String(b.guest_name || '').split(' ')[0] || b.guest_name,
@@ -103,10 +117,12 @@ export function bookingFields(b, s) {
     check_out_time: time12(s.check_out_time),
     guests: `${guests} guest${guests === 1 ? '' : 's'}`,
     total: fmtMoney(b.total_amount),
+    payment: b.payment_status === 'paid' ? 'paid online' : 'to be paid at the hotel',
     address: s.address,
     phone: s.phone,
     guest_phone: b.phone,
     requests: b.special_requests || '-',
+    review_link: cfg.review_url || '',
   };
 }
 
@@ -121,15 +137,16 @@ export function ownerAlertText(f, adminUrl) {
     `Guest: ${f.full_name} (${f.guest_phone})`,
     `Room: ${f.room_type}`,
     `Stay: ${f.check_in} to ${f.check_out}, ${f.guests}`,
-    `Total: ${f.total}`,
+    `Total: ${f.total} (${f.payment})`,
     `Requests: ${f.requests}`,
     adminUrl ? `Confirm it here: ${adminUrl}` : 'Open the admin panel to confirm it.',
   ].join('\n');
 }
 
 // Parameters for the approved templates. The order must match {{1}}, {{2}}, … in the README.
-export const ownerTemplateParams = (f) => [f.ref, f.full_name, f.guest_phone, f.room_type, f.check_in, f.check_out, f.guests, f.total];
-export const guestTemplateParams = (f) => [f.name, f.ref, f.hotel, f.room, f.check_in, f.check_in_time, f.check_out, f.total, f.address];
+export const ownerTemplateParams = (f) => [f.ref, f.full_name, f.guest_phone, f.room_type, f.check_in, f.check_out, f.guests, `${f.total} (${f.payment})`];
+export const guestTemplateParams = (f) => [f.name, f.ref, f.hotel, f.room, f.check_in, f.check_in_time, f.check_out, `${f.total} (${f.payment})`, f.address];
+export const reviewTemplateParams = (f) => [f.name, f.hotel, f.review_link];
 
 /** WhatsApp template parameters can't contain new lines or long runs of spaces. */
 const cleanParam = (v) => String(v ?? '-').replace(/\s+/g, ' ').trim().slice(0, 500) || '-';
@@ -193,23 +210,33 @@ export async function notifyOwner(db, booking, { adminUrl } = {}) {
   }
 }
 
-/** Sends (api mode) or prepares (link mode) the confirmation message for a guest. */
-export async function confirmGuest(db, booking) {
+// Messages sent to guests: the approved template used in api mode, the editable text used in link mode.
+const GUEST_MESSAGES = {
+  guest_confirmation: { template: 'wa_template_guest', text: 'wa_guest_message', params: guestTemplateParams },
+  review_request: { template: 'wa_template_review', text: 'wa_review_message', params: reviewTemplateParams },
+};
+
+/** Sends (api mode) or prepares (link mode) a WhatsApp message to the guest of a booking. */
+async function messageGuest(db, booking, kind) {
   const cfg = await waConfig(db);
-  const settings = await publicSettings(db);
+  const msg = GUEST_MESSAGES[kind];
   const to = normalizeNumber(booking.phone);
-  if (!to) return { ok: false, mode: cfg.wa_mode, error: `The guest's phone number (${booking.phone}) doesn't look like a WhatsApp number.` };
-  const fields = bookingFields(booking, settings);
-  const text = fillMessage(cfg.wa_guest_message, fields);
+  if (cfg.wa_mode === 'off') return { ok: false, kind, mode: 'off', error: 'WhatsApp messages are turned off in Settings.' };
+  if (!to) return { ok: false, kind, mode: cfg.wa_mode, error: `The guest's phone number (${booking.phone}) doesn't look like a WhatsApp number.` };
+  if (kind === 'review_request' && !cfg.review_url) {
+    return { ok: false, kind, mode: cfg.wa_mode, error: 'Add the Google review link in Settings → WhatsApp first.' };
+  }
+  const fields = bookingFields(booking, await publicSettings(db), cfg);
+  const text = fillMessage(cfg[msg.text], fields);
 
   if (cfg.wa_mode === 'api') {
-    const r = await sendTemplate(cfg, to, cfg.wa_template_guest, guestTemplateParams(fields));
-    await logNotification(db, booking.id, 'guest_confirmation', to, r.ok ? 'sent' : 'failed', r.ok ? text : r.error);
-    return { ...r, mode: 'api', to };
+    const r = await sendTemplate(cfg, to, cfg[msg.template], msg.params(fields));
+    await logNotification(db, booking.id, kind, to, r.ok ? 'sent' : 'failed', r.ok ? text : r.error);
+    return { ...r, kind, mode: 'api', to };
   }
-  if (cfg.wa_mode === 'link') {
-    await logNotification(db, booking.id, 'guest_confirmation', to, 'opened', text);
-    return { ok: true, mode: 'link', to, url: `https://wa.me/${to}?text=${encodeURIComponent(text)}` };
-  }
-  return { ok: false, mode: 'off', error: 'WhatsApp messages are turned off in Settings.' };
+  await logNotification(db, booking.id, kind, to, 'opened', text);
+  return { ok: true, kind, mode: 'link', to, url: `https://wa.me/${to}?text=${encodeURIComponent(text)}` };
 }
+
+export const confirmGuest = (db, booking) => messageGuest(db, booking, 'guest_confirmation');
+export const askForReview = (db, booking) => messageGuest(db, booking, 'review_request');
