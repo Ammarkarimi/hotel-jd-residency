@@ -5,7 +5,7 @@ import Icon from '../lib/Icon.jsx';
 import { StatusPill, useAdmin } from './AdminApp.jsx';
 
 export default function Dashboard() {
-  const { version, openBooking, notify, changed } = useAdmin();
+  const { version, openBooking, notify, changed, wa } = useAdmin();
   const [d, setD] = useState(null);
   const [error, setError] = useState('');
 
@@ -17,8 +17,11 @@ export default function Dashboard() {
 
   async function quick(id, status, label) {
     try {
-      await api(`/admin/bookings/${id}`, { method: 'PATCH', body: { status } });
-      notify(label);
+      const { whatsapp } = await api(`/admin/bookings/${id}`, { method: 'PATCH', body: { status } });
+      if (whatsapp?.ok) notify(`${label}. ${whatsapp.kind === 'review_request' ? 'Review link' : 'Confirmation'} sent on WhatsApp.`);
+      else if (whatsapp) notify(`${label}, but the WhatsApp message failed: ${whatsapp.error}`, 'err');
+      else if (status === 'checked_out' && wa?.wa_mode === 'link') notify(`${label}. Open the booking to send the Google review link.`);
+      else notify(label);
       changed();
     } catch (e) {
       notify(e.message, 'err');

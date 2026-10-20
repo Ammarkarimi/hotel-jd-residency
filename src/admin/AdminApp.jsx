@@ -248,6 +248,7 @@ function Shell({ admin, setAdmin }) {
 
 export function StatusPill({ status }) {
   const labels = {
+    awaiting_payment: 'Awaiting payment',
     pending: 'Pending',
     confirmed: 'Confirmed',
     checked_in: 'Checked in',

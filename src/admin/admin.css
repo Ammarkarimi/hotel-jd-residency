@@ -294,9 +294,14 @@ body {
   background: var(--st-out-bg);
   color: var(--st-out);
 }
-.pill-pending {
+.pill-pending,
+.pill-awaiting_payment {
   background: var(--st-pending-bg);
   color: var(--st-pending);
+}
+.pill-awaiting_payment {
+  outline: 1px dashed currentColor;
+  outline-offset: -1px;
 }
 .pill-confirmed {
   background: var(--st-confirmed-bg);
@@ -860,6 +865,8 @@ body {
   padding: 20px;
   overflow-y: auto;
   display: grid;
+  /* Rows keep their full height and the drawer scrolls, instead of squashing boxes like .facts. */
+  grid-auto-rows: max-content;
   gap: 16px;
   align-content: start;
 }
@@ -898,6 +905,30 @@ body {
 }
 .facts .strong {
   font-size: 1.1rem;
+}
+.facts .span-2 {
+  grid-column: 1 / -1;
+}
+.pay-state {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+}
+.pay-paid {
+  color: var(--st-in);
+}
+.pay-wait {
+  color: var(--st-pending);
+}
+.pay-state a {
+  font-weight: 500;
+  font-size: 0.85rem;
+}
+.wa-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 .note-box {
   padding: 12px 14px;
@@ -1479,6 +1510,7 @@ body {
   color: var(--st-in);
 }
 .afield code {
+  display: inline-block; /* lets a long list of placeholders wrap between items */
   font-size: 0.78rem;
   white-space: nowrap;
 }
@@ -1582,4 +1614,15 @@ body {
   .mode-pick {
     grid-template-columns: 1fr;
   }
+}
+
+/* ---------- payments ---------- */
+
+.copy-row {
+  display: flex;
+  gap: 8px;
+}
+.copy-row input {
+  flex: 1;
+  min-width: 0;
 }

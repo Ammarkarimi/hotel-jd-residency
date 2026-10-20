@@ -91,6 +91,29 @@ test('link mode (default): no automatic owner alert, confirmation opens WhatsApp
   assert.equal(sent.length, 0);
 });
 
+test('link mode: after check-out, the Google review link opens in WhatsApp', async () => {
+  const b = await api('POST', '/api/public/bookings', { ...guest, guest_name: 'Nikhil Joshi', check_in: d(20), check_out: d(21) });
+  const id = (await api('GET', `/api/admin/bookings?q=${b.body.booking.ref}`)).body.bookings[0].id;
+  await api('PATCH', `/api/admin/bookings/${id}`, { status: 'checked_in' });
+  // Only once the guest has left.
+  assert.equal((await api('POST', `/api/admin/bookings/${id}/whatsapp-review`)).status, 400);
+  const out = await api('PATCH', `/api/admin/bookings/${id}`, { status: 'checked_out' });
+  assert.equal(out.body.whatsapp, undefined, 'nothing is sent automatically in link mode');
+
+  const r = await api('POST', `/api/admin/bookings/${id}/whatsapp-review`);
+  assert.equal(r.status, 200);
+  const text = decodeURIComponent(r.body.whatsapp.url.split('text=')[1]);
+  assert.match(text, /Hello Nikhil, thank you for staying at Hotel JD Residency/);
+  assert.match(text, /https:\/\/search\.google\.com\/local\/writereview\?placeid=ChIJmwR9PdTJ5zsRlZvHhaw4rHg/);
+  assert.equal(r.body.notifications[0].kind, 'review_request');
+
+  // The link is configurable, and must be a web address.
+  assert.equal((await api('PUT', '/api/admin/whatsapp', { review_url: 'not a link' })).status, 400);
+  await api('PUT', '/api/admin/whatsapp', { review_url: 'https://g.page/r/example/review' });
+  const again = await api('POST', `/api/admin/bookings/${id}/whatsapp-review`);
+  assert.match(decodeURIComponent(again.body.whatsapp.url), /https:\/\/g\.page\/r\/example\/review/);
+});
+
 test('WhatsApp settings: token is write-only and numbers are validated', async () => {
   const bad = await api('PUT', '/api/admin/whatsapp', { wa_owner_numbers: '12345' });
   assert.equal(bad.status, 400);
@@ -164,6 +187,30 @@ test('api mode: auto-send on confirm, and failures are recorded without breaking
   const id2 = (await api('GET', `/api/admin/bookings?q=${b2.body.booking.ref}`)).body.bookings[0].id;
   const notes = (await api('GET', `/api/admin/bookings/${id2}`)).body.notifications;
   assert.ok(notes.some((n) => n.status === 'failed' && /Template name/.test(n.detail)));
+});
+
+test('api mode: checking out sends the review request automatically (can be turned off)', async () => {
+  const b = await api('POST', '/api/public/bookings', { ...guest, guest_name: 'Sana Khan', phone: '+91 93333 44444', check_in: d(16), check_out: d(17) });
+  const id = (await api('GET', `/api/admin/bookings?q=${b.body.booking.ref}`)).body.bookings[0].id;
+  await api('PATCH', `/api/admin/bookings/${id}`, { status: 'checked_in' });
+  sent.length = 0;
+  const out = await api('PATCH', `/api/admin/bookings/${id}`, { status: 'checked_out' });
+  assert.equal(out.body.whatsapp.ok, true);
+  assert.equal(out.body.whatsapp.kind, 'review_request');
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].body.to, '919333344444');
+  assert.equal(sent[0].body.template.name, 'stay_review');
+  assert.deepEqual(
+    sent[0].body.template.components[0].parameters.map((p) => p.text),
+    ['Sana', 'Hotel JD Residency', 'https://g.page/r/example/review'],
+  );
+
+  await api('PUT', '/api/admin/whatsapp', { wa_auto_review: false });
+  await api('PATCH', `/api/admin/bookings/${id}`, { status: 'checked_in' });
+  sent.length = 0;
+  const quiet = await api('PATCH', `/api/admin/bookings/${id}`, { status: 'checked_out' });
+  assert.equal(quiet.body.whatsapp, undefined);
+  assert.equal(sent.length, 0);
 });
 
 test('test message goes to the owner numbers', async () => {

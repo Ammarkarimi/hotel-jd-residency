@@ -4,15 +4,18 @@ import Icon from '../lib/Icon.jsx';
 import { useAdmin } from './AdminApp.jsx';
 
 // The exact text to submit as message templates in WhatsApp Manager (category: Utility).
-// The {{n}} order matches ownerTemplateParams / guestTemplateParams in server/whatsapp.js.
+// The {{n}} order matches ownerTemplateParams / guestTemplateParams / reviewTemplateParams in server/whatsapp.js.
 export const TEMPLATE_TEXT = {
   owner:
     'New booking {{1}} received. Guest: {{2}} ({{3}}). Room: {{4}}. Check-in: {{5}}. Check-out: {{6}}. Guests: {{7}}. Total: {{8}}. Please open the admin panel to confirm it.',
   guest:
-    'Hello {{1}}, your booking {{2}} at {{3}} is confirmed. Room: {{4}}. Check-in: {{5}} from {{6}}. Check-out: {{7}}. Total: {{8}}, payable at the hotel. Address: {{9}}. Please carry a valid photo ID. We look forward to hosting you.',
+    'Hello {{1}}, your booking {{2}} at {{3}} is confirmed. Room: {{4}}. Check-in: {{5}} from {{6}}. Check-out: {{7}}. Total: {{8}}. Address: {{9}}. Please carry a Passport or Aadhaar for each adult. We look forward to hosting you.',
+  review:
+    'Hello {{1}}, thank you for staying at {{2}}. We hope you had a comfortable stay. If you have a minute, please share your experience in a Google review: {{3}} We look forward to welcoming you again.',
 };
 
-const PLACEHOLDERS = ['name', 'full_name', 'ref', 'hotel', 'room', 'check_in', 'check_in_time', 'check_out', 'check_out_time', 'guests', 'total', 'address', 'phone'];
+const PLACEHOLDERS = ['name', 'full_name', 'ref', 'hotel', 'room', 'check_in', 'check_in_time', 'check_out', 'check_out_time', 'guests', 'total', 'payment', 'address', 'phone'];
+const on = (v) => v === true || v === '1';
 
 const MODES = [
   ['off', 'Off', 'No WhatsApp messages.'],
@@ -57,8 +60,12 @@ export default function WhatsAppSettings() {
         wa_phone_number_id: f.wa_phone_number_id,
         wa_template_owner: f.wa_template_owner,
         wa_template_guest: f.wa_template_guest,
+        wa_template_review: f.wa_template_review,
         wa_template_lang: f.wa_template_lang,
-        wa_auto_confirm: f.wa_auto_confirm === true || f.wa_auto_confirm === '1',
+        wa_auto_confirm: on(f.wa_auto_confirm),
+        wa_auto_review: on(f.wa_auto_review),
+        review_url: f.review_url,
+        wa_review_message: f.wa_review_message,
         ...(token ? { wa_token: token } : {}),
         ...extra,
       };
@@ -98,7 +105,8 @@ export default function WhatsAppSettings() {
         <Icon name="whatsapp" size={20} /> WhatsApp messages
       </h2>
       <p className="muted small">
-        Let the owner know about new bookings, and send guests their booking confirmation on WhatsApp.
+        Let the owner know about new bookings, send guests their booking confirmation, and ask them for a Google review after
+        they check out.
       </p>
 
       <form className="aform" onSubmit={save}>
@@ -131,17 +139,36 @@ export default function WhatsAppSettings() {
               </small>
             </label>
 
+            <label className="afield span-2">
+              <span>Google review link (sent to guests after check-out)</span>
+              <input type="url" value={f.review_url || ''} onChange={set('review_url')} placeholder="https://g.page/r/…/review" />
+              <small className="muted">
+                In Google Business Profile, choose “Ask for reviews” and copy the link.{' '}
+                {f.review_url && (
+                  <a href={f.review_url} target="_blank" rel="noreferrer">
+                    Test the link
+                  </a>
+                )}
+              </small>
+            </label>
+
             {!isApi && (
-              <label className="afield span-2">
-                <span>Confirmation message</span>
-                <textarea rows={9} value={f.wa_guest_message} onChange={set('wa_guest_message')} />
-                <small className="muted">
-                  Words in curly brackets are filled in for each booking:{' '}
-                  {PLACEHOLDERS.map((p) => (
-                    <code key={p}>{`{${p}}`} </code>
-                  ))}
-                </small>
-              </label>
+              <>
+                <label className="afield span-2">
+                  <span>Confirmation message</span>
+                  <textarea rows={9} value={f.wa_guest_message} onChange={set('wa_guest_message')} />
+                </label>
+                <label className="afield span-2">
+                  <span>Review request message (after check-out)</span>
+                  <textarea rows={7} value={f.wa_review_message} onChange={set('wa_review_message')} />
+                  <small className="muted">
+                    Words in curly brackets are filled in for each booking:{' '}
+                    {[...PLACEHOLDERS, 'review_link'].map((p) => (
+                      <code key={p}>{`{${p}}`} </code>
+                    ))}
+                  </small>
+                </label>
+              </>
             )}
 
             {isApi && (
@@ -182,12 +209,20 @@ export default function WhatsAppSettings() {
                   <input value={f.wa_template_guest} onChange={set('wa_template_guest')} />
                 </label>
                 <label className="afield">
+                  <span>Review request template name</span>
+                  <input value={f.wa_template_review} onChange={set('wa_template_review')} />
+                </label>
+                <label className="afield">
                   <span>Template language code</span>
                   <input value={f.wa_template_lang} onChange={set('wa_template_lang')} placeholder="en" />
                 </label>
-                <label className="acheck">
-                  <input type="checkbox" checked={f.wa_auto_confirm === true || f.wa_auto_confirm === '1'} onChange={set('wa_auto_confirm')} />
+                <label className="acheck span-2">
+                  <input type="checkbox" checked={on(f.wa_auto_confirm)} onChange={set('wa_auto_confirm')} />
                   Send the confirmation automatically when I confirm a booking
+                </label>
+                <label className="acheck span-2">
+                  <input type="checkbox" checked={on(f.wa_auto_review)} onChange={set('wa_auto_review')} />
+                  Send the Google review link automatically when a guest checks out
                 </label>
               </>
             )}
@@ -244,8 +279,9 @@ export default function WhatsAppSettings() {
               Settings → System users → Generate token, with the <code>whatsapp_business_messaging</code> permission).
             </li>
             <li>
-              In <b>WhatsApp Manager → Message templates</b>, create these two templates, category <b>Utility</b>, language{' '}
-              <b>English</b>, and wait for approval (usually minutes):
+              In <b>WhatsApp Manager → Message templates</b>, create these three templates, category <b>Utility</b>, language{' '}
+              <b>English</b>, and wait for approval (usually minutes). Meta may file the review request under Marketing,
+              which is fine:
               <div className="template-box">
                 <div>
                   <b>{f.wa_template_owner}</b>
@@ -263,6 +299,15 @@ export default function WhatsAppSettings() {
                   </button>
                 </div>
                 <p>{TEMPLATE_TEXT.guest}</p>
+              </div>
+              <div className="template-box">
+                <div>
+                  <b>{f.wa_template_review}</b>
+                  <button type="button" className="linky small" onClick={() => copy(TEMPLATE_TEXT.review)}>
+                    Copy text
+                  </button>
+                </div>
+                <p>{TEMPLATE_TEXT.review}</p>
               </div>
             </li>
             <li>Save here and press “Send test alert to owner”.</li>
