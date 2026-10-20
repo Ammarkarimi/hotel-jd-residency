@@ -319,11 +319,10 @@ button.field-box {
 }
 .topbar-row {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 16px;
   padding: 7px 0;
 }
-.topbar-row span,
 .topbar-row a {
   display: inline-flex;
   align-items: center;
@@ -1898,9 +1897,6 @@ button.field-box {
 @media (max-width: 760px) {
   body {
     padding-bottom: 76px;
-  }
-  .topbar-row span {
-    display: none;
   }
   .topbar-row {
     justify-content: center;

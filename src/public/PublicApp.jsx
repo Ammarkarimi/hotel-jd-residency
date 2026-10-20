@@ -84,7 +84,6 @@ export function SectionLink({ id, children, className }) {
 
 function Header() {
   const { info, openFind } = useInfo();
-  const online = usePayOnline();
   const [open, setOpen] = useState(false);
   const s = info?.settings;
   const { pathname } = useLocation();
@@ -93,9 +92,6 @@ function Header() {
     <>
       <div className="topbar">
         <div className="wrap topbar-row">
-          <span>
-            <Icon name="wallet" size={15} /> {online ? 'Book direct: best price, secure online payment' : 'Book direct: no prepayment, pay at the hotel'}
-          </span>
           {s?.phone && (
             <a href={telHref(s.phone)}>
               <Icon name="phone" size={15} /> {s.phone}
