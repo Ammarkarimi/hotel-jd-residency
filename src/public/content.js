@@ -9,7 +9,7 @@ export const PERKS = [
 ];
 
 // Replaces the first perk when guests pay online.
-export const PAY_ONLINE_PERK = { icon: 'shield', title: 'Secure payment', text: 'UPI, cards & netbanking' };
+export const PAY_ONLINE_PERK = { icon: 'wallet', title: 'Full payment at booking', text: 'Secure UPI, cards & netbanking' };
 
 export const AMENITIES = [
   { icon: 'snow', title: 'Air conditioning', text: 'In every room' },
@@ -27,24 +27,41 @@ export const AMENITIES = [
 ];
 
 // House rules. kind: 'no' = not allowed, 'yes' = allowed, 'info' = good to know, 'fee' = extra charge.
-export const KEY_RULE = {
-  title: 'Unmarried couples are not allowed',
-  text: 'This applies to all rooms, including hourly stay rooms. Please book only if every couple in your group is married.',
-};
+// `strong` rules are shown in red. {checkIn} and {checkOut} are replaced with the times set in the admin panel.
+
+// The most important rules: shown in red on the home page and on the booking form.
+export const KEY_RULES = [
+  { title: 'Unmarried couples are not allowed', text: 'Applies to all rooms, including hourly stay rooms.' },
+  { title: 'Alcohol is not allowed', text: 'No alcohol consumption anywhere on the property.' },
+  { title: 'Local IDs are not accepted', text: 'Only Passport and Aadhaar are accepted as ID proof.' },
+];
 
 export const MUST_READ = [
+  { kind: 'no', text: 'Unmarried couples are not allowed', strong: true },
+  { kind: 'no', text: 'Alcohol consumption is not allowed within the property premises', strong: true },
+  { kind: 'no', text: 'Local IDs are not allowed', strong: true },
+  { kind: 'yes', text: 'Passport and Aadhaar are accepted as ID proof' },
   { kind: 'info', text: 'Primary guest should be at least 18 years of age' },
   { kind: 'yes', text: 'Groups with only male guests are allowed' },
-  { kind: 'info', text: 'Passport and Aadhaar are accepted as ID proof. Local IDs are not allowed' },
   { kind: 'no', text: 'Pets are not allowed' },
+  { kind: 'fee', text: 'Early check-in (before {checkIn}): ₹1,000 extra' },
 ];
 
 export const RULES = [
   {
+    icon: 'clock',
+    title: 'Check-in & check-out',
+    items: [
+      { kind: 'info', text: 'Check-in from {checkIn}' },
+      { kind: 'info', text: 'Check-out by {checkOut}' },
+      { kind: 'fee', text: 'Early check-in (before {checkIn}): ₹1,000 extra, subject to availability' },
+    ],
+  },
+  {
     icon: 'users',
     title: 'Guest profile',
     items: [
-      { kind: 'no', text: 'Unmarried couples are not allowed' },
+      { kind: 'no', text: 'Unmarried couples are not allowed', strong: true },
       { kind: 'info', text: 'Primary guest should be at least 18 years of age' },
       { kind: 'yes', text: 'Groups with only male guests are allowed' },
     ],
@@ -52,21 +69,21 @@ export const RULES = [
   {
     icon: 'clock',
     title: 'Hourly stays',
-    items: [{ kind: 'no', text: 'Unmarried couples are not allowed in hourly stay rooms' }],
+    items: [{ kind: 'no', text: 'Unmarried couples are not allowed in hourly stay rooms', strong: true }],
   },
   {
     icon: 'idcard',
     title: 'ID proof',
     items: [
       { kind: 'yes', text: 'Passport and Aadhaar are accepted as ID proof' },
-      { kind: 'no', text: 'Local IDs are not allowed' },
+      { kind: 'no', text: 'Local IDs are not allowed', strong: true },
     ],
   },
   {
     icon: 'glass',
     title: 'Smoking & alcohol',
     items: [
-      { kind: 'no', text: 'Alcohol consumption is not allowed within the property premises' },
+      { kind: 'no', text: 'Alcohol consumption is not allowed within the property premises', strong: true },
       { kind: 'yes', text: 'Smoking within the premises is allowed' },
     ],
   },
@@ -74,7 +91,6 @@ export const RULES = [
     icon: 'leaf',
     title: 'Food',
     items: [
-      { kind: 'no', text: 'Non-veg food is not allowed' },
       { kind: 'yes', text: 'Outside food is allowed' },
       { kind: 'no', text: 'Food delivery service is not available at the property' },
       { kind: 'no', text: 'In-room dining is not available' },
@@ -140,7 +156,7 @@ export const ABOUT = {
 export const FAQ = [
   {
     q: 'What are the check-in and check-out times?',
-    a: 'Check-in is from {checkIn} and check-out is until {checkOut}. Early check-in or late check-out depends on availability; just ask us.',
+    a: 'Check-in is from {checkIn} and check-out is until {checkOut}. Early check-in (before {checkIn}) costs ₹1,000 extra and depends on availability. For a late check-out, just ask us.',
   },
   {
     q: 'Do I need to pay when I book online?',

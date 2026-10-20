@@ -224,7 +224,7 @@ function RoomTypeModal({ type, onClose, onSaved }) {
           </label>
           <label className="afield span-2">
             <span>Amenities (comma separated)</span>
-            <input value={f.amenities} onChange={set('amenities')} placeholder="Air conditioning, Free Wi-Fi, Smart TV" />
+            <input value={f.amenities} onChange={set('amenities')} placeholder="Air conditioning, Free Wi-Fi, TV" />
           </label>
           <PhotoField
             wide

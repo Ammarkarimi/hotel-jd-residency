@@ -74,7 +74,7 @@ export default function RoomDetails({ type, onClose }) {
             <div className="price">
               <b>{money(type.price)}</b>
               <span> / night</span>
-              <small>{online ? 'Secure online payment' : 'No prepayment · Pay at hotel'}</small>
+              <small>{online ? 'Full payment at the time of booking' : 'No prepayment · Pay at hotel'}</small>
             </div>
             <Link className="btn btn-primary btn-lg" to={`/book?room=${type.id}`}>
               Book this room

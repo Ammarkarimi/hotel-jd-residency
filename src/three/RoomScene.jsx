@@ -275,7 +275,7 @@ function Furniture({ type }) {
       {!family && <Lamp position={[1.55, 0, -ROOM_D / 2 + 0.35]} accent={accent} />}
       {family && <Bed accent={accent} position={[2.1, 0, -1.25]} width={1.1} single />}
       <Rug accent={accent} />
-      <TV label={hasTv ? 'Smart TV' : null} />
+      <TV label={hasTv ? 'TV' : null} />
       {lounge ? <Armchair accent={accent} /> : <Desk />}
     </group>
   );
