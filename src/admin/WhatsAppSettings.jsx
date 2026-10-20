@@ -188,7 +188,9 @@ export default function WhatsAppSettings() {
                   ) : (
                     <input
                       type="password"
-                      autoComplete="off"
+                      autoComplete="new-password"
+                      data-1p-ignore
+                      data-lpignore="true"
                       value={token}
                       onChange={(e) => setToken(e.target.value)}
                       placeholder={f.wa_token_set ? '•••••••• saved (type to replace)' : 'Paste the permanent access token'}
