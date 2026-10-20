@@ -9,14 +9,109 @@ export const PERKS = [
 ];
 
 export const AMENITIES = [
-  { icon: 'wifi', title: 'Free high-speed Wi-Fi' },
-  { icon: 'snow', title: 'Air-conditioned rooms' },
-  { icon: 'bell', title: '24/7 front desk' },
-  { icon: 'sparkle', title: 'Daily housekeeping' },
-  { icon: 'drop', title: 'Hot water round the clock' },
-  { icon: 'bolt', title: 'Power backup' },
-  { icon: 'shield', title: 'CCTV & secure access' },
-  { icon: 'car', title: 'Cab & travel help' },
+  { icon: 'snow', title: 'Air conditioning', text: 'In every room' },
+  { icon: 'wifi', title: 'WiFi', text: 'Stay connected' },
+  { icon: 'tv', title: 'TV', text: 'In your room' },
+  { icon: 'flame', title: 'Geyser', text: 'Hot water for your bath' },
+  { icon: 'bottle', title: 'Mineral water', text: 'Safe drinking water' },
+  { icon: 'tooth', title: 'Dental kit', text: 'Toothbrush and toothpaste' },
+  { icon: 'sparkle', title: 'Housekeeping', text: 'Clean rooms, fresh linen' },
+  { icon: 'cloche', title: 'Room service', text: 'Ask the front desk' },
+  { icon: 'shirt', title: 'Laundry service', text: 'Charged separately', paid: true },
+  { icon: 'luggage', title: 'Cloak room', text: 'Keep your luggage safe' },
+  { icon: 'bolt', title: 'Power backup', text: 'No power cuts' },
+  { icon: 'cctv', title: 'CCTV', text: 'Secure premises' },
+];
+
+// House rules. kind: 'no' = not allowed, 'yes' = allowed, 'info' = good to know, 'fee' = extra charge.
+export const KEY_RULE = {
+  title: 'Unmarried couples are not allowed',
+  text: 'This applies to all rooms, including hourly stay rooms. Please book only if every couple in your group is married.',
+};
+
+export const MUST_READ = [
+  { kind: 'info', text: 'Primary guest should be at least 18 years of age' },
+  { kind: 'yes', text: 'Groups with only male guests are allowed' },
+  { kind: 'info', text: 'Passport and Aadhaar are accepted as ID proof. Local IDs are not allowed' },
+  { kind: 'no', text: 'Pets are not allowed' },
+];
+
+export const RULES = [
+  {
+    icon: 'users',
+    title: 'Guest profile',
+    items: [
+      { kind: 'no', text: 'Unmarried couples are not allowed' },
+      { kind: 'info', text: 'Primary guest should be at least 18 years of age' },
+      { kind: 'yes', text: 'Groups with only male guests are allowed' },
+    ],
+  },
+  {
+    icon: 'clock',
+    title: 'Hourly stays',
+    items: [{ kind: 'no', text: 'Unmarried couples are not allowed in hourly stay rooms' }],
+  },
+  {
+    icon: 'idcard',
+    title: 'ID proof',
+    items: [
+      { kind: 'yes', text: 'Passport and Aadhaar are accepted as ID proof' },
+      { kind: 'no', text: 'Local IDs are not allowed' },
+    ],
+  },
+  {
+    icon: 'glass',
+    title: 'Smoking & alcohol',
+    items: [
+      { kind: 'no', text: 'Alcohol consumption is not allowed within the property premises' },
+      { kind: 'yes', text: 'Smoking within the premises is allowed' },
+    ],
+  },
+  {
+    icon: 'leaf',
+    title: 'Food',
+    items: [
+      { kind: 'no', text: 'Non-veg food is not allowed' },
+      { kind: 'yes', text: 'Outside food is allowed' },
+      { kind: 'no', text: 'Food delivery service is not available at the property' },
+      { kind: 'no', text: 'In-room dining is not available' },
+    ],
+  },
+  {
+    icon: 'paw',
+    title: 'Pets',
+    items: [
+      { kind: 'no', text: 'Pets are not allowed' },
+      { kind: 'info', text: 'There are no pets living on the property' },
+    ],
+  },
+  {
+    icon: 'wheelchair',
+    title: 'Accessibility',
+    items: [{ kind: 'no', text: 'The property is not accessible to guests who use a wheelchair. Please make arrangements accordingly' }],
+  },
+  {
+    icon: 'list',
+    title: 'Other rules',
+    items: [
+      { kind: 'no', text: 'Private parties or events are not allowed' },
+      { kind: 'no', text: 'Please do not invite outside visitors to your room during your stay' },
+    ],
+  },
+  {
+    icon: 'baby',
+    title: 'Infants',
+    items: [{ kind: 'info', text: '1 infant (0–2 yrs) is counted in the room capacity' }],
+  },
+  {
+    icon: 'bed',
+    title: 'Children & extra bed',
+    items: [
+      { kind: 'no', text: 'No extra bed is provided for a child included in the booking' },
+      { kind: 'yes', text: 'An extra bed is provided for any additional guest included in the booking' },
+      { kind: 'fee', text: '₹1,000 per guest for an extra mattress, paid at the property' },
+    ],
+  },
 ];
 
 // Approximate travel times; please verify for your exact address.
@@ -34,7 +129,7 @@ export const ABOUT = {
     'Hotel JD Residency is a friendly, no-fuss hotel for business travellers, families and anyone visiting the city. Our rooms are clean, quiet and air-conditioned, with fresh linen, fast Wi-Fi and hot water at any hour.',
     'We are close to the station, markets and the airport, and our front desk is open all day and night to help with check-in, cabs and local tips.',
   ],
-  points: ['Walk to shops and local transport', 'Rooms for solo travellers, couples and families', 'Friendly staff, available around the clock'],
+  points: ['Walk to shops and local transport', 'Rooms for solo travellers, families and groups', 'Friendly staff, available around the clock'],
 };
 
 // {checkIn} and {checkOut} are replaced with the times set in the admin panel.
@@ -53,7 +148,11 @@ export const FAQ = [
   },
   {
     q: 'What do I need to bring at check-in?',
-    a: 'Please carry a valid government photo ID (Aadhaar, passport, driving licence or voter ID) for every adult guest.',
+    a: 'Please carry a Passport or Aadhaar card for every adult guest. Local IDs are not accepted. The primary guest must be at least 18 years old.',
+  },
+  {
+    q: 'Can I get an extra bed?',
+    a: 'Yes, for an additional guest included in the booking. An extra mattress costs ₹1,000 per guest, paid at the hotel. No extra bed is provided for a child included in the booking.',
   },
   {
     q: 'How do I change or cancel my booking?',
