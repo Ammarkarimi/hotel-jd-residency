@@ -4,7 +4,7 @@ Website and front-desk panel for Hotel JD Residency.
 
 - **Public website** (`/`): a clean, classic hotel site modelled on the patterns guests know from big hotel chains: a date and guest search right at the top, "pay at hotel / no booking fees" reassurance, room cards with prices, amenities, map, FAQ, and a call or WhatsApp button everywhere.
 - **Booking page** (`/book`): pick dates and guests, choose a room (live availability and total price), enter name and phone, done. A summary panel shows the price at every step, and guests get a booking reference plus "what happens next". Works well on phones, with a sticky "Confirm booking" bar.
-- **Room details**: each room opens a details view with its photo and an optional interactive **3D view** of the room.
+- **Room details**: each room opens a details view with its photo, facilities and price.
 - **Staff panel** (`/admin`): a separate login where the hotel manages **rooms**, **prices**, **photos** and **bookings**:
   - Dashboard: arrivals, departures, guests in house, occupancy, 14-day occupancy forecast and revenue
   - Bookings: search and filter, confirm, assign room, check in/out, cancel, notes, CSV export, walk-in/phone bookings
@@ -133,7 +133,6 @@ server/            Express API + Postgres
   routes/admin.js  staff API (auth, dashboard, bookings, calendar, rooms, settings)
 src/
   public/          the website (home page, booking page, room details)
-  three/           3D room viewer, built with three.js / react-three-fiber
   admin/           the staff panel
 test/              API tests (node --test)
 ```

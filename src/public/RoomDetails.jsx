@@ -1,17 +1,12 @@
-import { Suspense, lazy, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { money } from '../lib/format.js';
 import Icon from '../lib/Icon.jsx';
-import { SceneBoundary, hasWebGL, useEscape } from './effects.jsx';
+import { useEscape } from './effects.jsx';
 import { RoomImage } from './Home.jsx';
 import { usePayOnline } from './PublicApp.jsx';
 
-const RoomScene = lazy(() => import('../three/RoomScene.jsx'));
-
 export default function RoomDetails({ type, onClose }) {
-  const webgl = useMemo(hasWebGL, []);
   const online = usePayOnline();
-  const [view, setView] = useState('photo');
   useEscape(onClose);
   return (
     <div className="modal-backdrop" onMouseDown={onClose}>
@@ -20,28 +15,7 @@ export default function RoomDetails({ type, onClose }) {
           <Icon name="x" />
         </button>
         <div className="room-media">
-          {view === '3d' && webgl ? (
-            <div className="room-3d">
-              <SceneBoundary fallback={<RoomImage type={type} />}>
-                <Suspense fallback={<div className="room-3d-loading">Loading 3D view…</div>}>
-                  <RoomScene type={type} />
-                </Suspense>
-              </SceneBoundary>
-              <span className="drag-hint">Drag to look around</span>
-            </div>
-          ) : (
-            <RoomImage type={type} />
-          )}
-          {webgl && (
-            <div className="media-switch" role="tablist" aria-label="Room view">
-              <button role="tab" aria-selected={view === 'photo'} onClick={() => setView('photo')}>
-                <Icon name="image" size={16} /> Photo
-              </button>
-              <button role="tab" aria-selected={view === '3d'} onClick={() => setView('3d')}>
-                <Icon name="cube" size={16} /> 3D view
-              </button>
-            </div>
-          )}
+          <RoomImage type={type} />
         </div>
         <div className="room-detail-body">
           <h2 id="room-title">{type.name}</h2>
