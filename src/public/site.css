@@ -1367,57 +1367,6 @@ button.field-box {
   inset: 0;
   aspect-ratio: auto;
 }
-.room-3d {
-  position: absolute;
-  inset: 0;
-}
-.room-3d canvas {
-  cursor: grab;
-  touch-action: none;
-}
-.room-3d-loading {
-  display: grid;
-  place-items: center;
-  height: 100%;
-  color: var(--muted);
-}
-.drag-hint {
-  position: absolute;
-  left: 12px;
-  bottom: 12px;
-  padding: 4px 10px;
-  border-radius: 6px;
-  background: rgba(0, 0, 0, 0.55);
-  color: #fff;
-  font-size: 0.8rem;
-  pointer-events: none;
-}
-.media-switch {
-  position: absolute;
-  left: 12px;
-  top: 12px;
-  display: flex;
-  padding: 4px;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.95);
-  box-shadow: var(--shadow);
-}
-.media-switch button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 12px;
-  border: 0;
-  border-radius: 7px;
-  background: none;
-  color: var(--ink-2);
-  font: 600 0.85rem var(--sans);
-  cursor: pointer;
-}
-.media-switch button[aria-selected='true'] {
-  background: var(--primary);
-  color: #fff;
-}
 .room-detail-body {
   display: flex;
   flex-direction: column;

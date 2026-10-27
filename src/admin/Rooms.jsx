@@ -235,7 +235,7 @@ function RoomTypeModal({ type, onClose, onSaved }) {
             onChange={(url) => setF({ ...f, image_url: url })}
           />
           <label className="afield">
-            <span>Colour (calendar &amp; 3D view)</span>
+            <span>Colour (calendar)</span>
             <input type="color" value={f.accent} onChange={set('accent')} />
           </label>
           <label className="afield">
